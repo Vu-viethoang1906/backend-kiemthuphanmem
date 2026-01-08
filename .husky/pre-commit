@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# Resolve hook directory to an absolute path to avoid wrong relative paths
+DIR="$(cd -- "$(dirname "$0")" >/dev/null 2>&1 && pwd)"
+. "$DIR/_/husky.sh"
+
+# Prefer running lint-staged via node directly to avoid npx/bash issues on Windows
+if command -v node >/dev/null 2>&1; then
+	node "$DIR/../node_modules/lint-staged/bin/lint-staged.js"
+else
+	npx --no-install lint-staged
+fi

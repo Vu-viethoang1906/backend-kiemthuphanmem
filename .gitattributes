@@ -1,0 +1,16 @@
+# Giữ cho tất cả file shell script dùng LF (Linux)
+*.sh text eol=lf
+
+# Các file JS, TS, JSON cũng nên giữ LF để tránh xung đột
+*.js text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+
+# Các file batch hoặc PowerShell giữ CRLF (vì Windows)
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Dockerfile, YAML nên LF (Linux)
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

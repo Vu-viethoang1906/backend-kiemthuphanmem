@@ -1,0 +1,131 @@
+services:
+  mongo-test:
+    image: mongo:6.0
+    container_name: ken-be-mongodb-test
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: ken_db_test
+    command:
+      - mongod
+      - --replSet=rs0
+      - --bind_ip_all
+      - --wiredTigerCacheSizeGB=0.5
+      - --maxConns=500
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo-test-data:/data/db
+      - mongo-test-config:/data/configdb
+    networks:
+      - ken-test-network
+    healthcheck:
+      test:
+        ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+  mongo-test-init:
+    image: mongo:6.0
+    container_name: ken-be-mongo-test-init
+    restart: "no"
+    depends_on:
+      mongo-test:
+        condition: service_healthy
+    volumes:
+      - ./scripts/init-replica-set-test.sh:/init-replica-set-test.sh:ro
+    entrypoint: ["/bin/sh", "/init-replica-set-test.sh"]
+    networks:
+      - ken-test-network
+
+  app-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      target: test
+      args:
+        NODE_ENV: test
+    image: ken-be-app-test:latest
+    container_name: ken-be-app-test
+    restart: "no"
+    env_file:
+      - .env.test.docker
+    environment:
+      - NODE_ENV=test
+      - PORT=3006
+      - MONGO_URI=mongodb://mongo-test:27017/ken_db_test?replicaSet=rs0&retryWrites=true&w=majority
+      - DEBUG=*
+      - NODE_OPTIONS=--max-old-space-size=4096
+    volumes:
+      - /app/node_modules
+      - ./uploads/test:/app/uploads/test
+    # Keep container running - do NOT use entrypoint
+    # GitHub Actions will run: docker exec ken-be-app-test npm run test:coverage
+    command: ["tail", "-f", "/dev/null"]
+    ports:
+      - "3006:3006"
+    depends_on:
+      mongo-test:
+        condition: service_healthy
+      mongo-test-init:
+        condition: service_completed_successfully
+    networks:
+      - ken-test-network
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "0.5"
+          memory: 2G
+
+  mongo-express-test:
+    image: mongo-express:1.0
+    container_name: ken-be-mongo-express-test
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongo-test:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: test123
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+      ME_CONFIG_SITE_BASEURL: /mongo-express
+    ports:
+      - "8082:8081"
+    depends_on:
+      mongo-test:
+        condition: service_healthy
+    networks:
+      - ken-test-network
+    profiles:
+      - test-ui
+    read_only: true
+    tmpfs:
+      - /tmp
+
+networks:
+  ken-test-network:
+    driver: bridge
+    name: ken-test-network
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.29.0.0/16
+
+volumes:
+  mongo-test-data:
+    name: ken-mongo-test-data
+    driver: local
+
+  mongo-test-config:
+    name: ken-mongo-test-config
+    driver: local

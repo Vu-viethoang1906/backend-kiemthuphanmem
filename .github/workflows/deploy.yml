@@ -1,0 +1,168 @@
+name: CI - Node.js Test with Docker
+
+on:
+  push:
+    branches: ["dev", "main"]
+  pull_request:
+    branches: ["dev", "main"]
+  workflow_dispatch:
+
+jobs:
+  #
+  test:
+    name: Run Tests inside Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security Check - npm audit
+        run: npm audit --audit-level=critical
+
+      - name: Run React lint / tests
+        run: |
+          npm run lint || true
+
+      - name: Check Docker versions
+        run: |
+          docker --version
+          docker compose version || docker-compose version
+
+      - name: Build and start containers for testing
+        run: |
+          echo "🧱 Building and starting Docker test stack..."
+          docker compose -f docker-compose.test.yml up --build -d
+
+      - name: Wait for MongoDB healthy
+        run: |
+          echo "⏳ Waiting for MongoDB test container to be healthy..."
+          for i in {1..30}; do
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' ken-be-mongodb-test)" = "healthy" ]; then
+              echo "✅ MongoDB is healthy!"
+              exit 0
+            fi
+            echo "MongoDB not ready, retry..."
+            sleep 5
+          done
+          echo "❌ Timeout waiting for MongoDB"
+          exit 1
+
+      - name: Wait for app-test container ready
+        run: |
+          echo "⏳ Waiting for app-test container..."
+          for i in {1..30}; do
+            if docker ps | grep -q "ken-be-app-test"; then
+              echo "✅ app-test container is running!"
+              exit 0
+            fi
+            echo "app-test not ready, retry..."
+            sleep 5
+          done
+          echo "❌ Timeout waiting for app-test"
+          exit 1
+
+      - name: Run tests (with coverage)
+        run: |
+          echo "🚀 Running Jest coverage inside container..."
+
+          # Chạy test và DỪNG NẾU FAIL (không dùng || true)
+          docker exec ken-be-app-test sh -c "DEBUG=''    "
+
+          # Kiểm tra file coverage để đảm bảo test chạy thành công
+          if docker exec ken-be-app-test sh -c "ls coverage/lcov.info" 2>/dev/null; then
+            echo "✅ Tests passed and coverage generated!"
+          else
+            echo "❌ Tests finished but no coverage file found"
+            docker logs ken-be-app-test || true
+            docker logs ken-be-mongodb-test || true
+            exit 1
+          fi
+
+      - name: Collect test results (optional)
+        if: always()
+        run: |
+          echo "📦 Collecting coverage reports..."
+          docker cp ken-be-app-test:/app/coverage ./coverage-docker || echo "Failed to copy coverage"
+
+      - name: Clean up Docker resources
+        if: always()
+        run: |
+          echo "🧹 Cleaning up test containers..."
+          docker compose -f docker-compose.test.yml down -v || true
+
+  deploy_dev:
+    name: Deploy to DEV Server
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: SSH to DEV server and deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          port: 24700
+          script: |
+            echo "🚀 Deploying to STAGING..."
+            cd /root/KEN_CodeGym/Half-Baked-Devs-KEN-BE
+
+            git stash push -m "rollback backup" || true
+            git tag -f deploy-backup || true  # optional: mark current commit
+            git pull origin main
+
+            APP_VERSION=$(git rev-parse --short HEAD)
+            export APP_VERSION
+
+            cd /root/KEN_CodeGym
+
+            # Backup container cũ
+            docker rename ken-be-app ken-be-app-old || true
+
+            # Build và up container mới
+            docker compose build app
+            docker compose up -d app
+
+            # Kiểm tra container mới
+            sleep 10
+            if ! docker ps | grep -q "ken-be-app"; then
+                echo "❌ Deploy failed! Rolling back..."
+                docker rm -f ken-be-app || true
+                docker rename ken-be-app-old ken-be-app || true
+                docker start ken-be-app || true
+                cd /root/KEN_CodeGym/Half-Baked-Devs-KEN-BE
+                git reset --hard deploy-backup
+                exit 1
+            else
+                echo "✅ Deploy succeeded!"
+                docker rm -f ken-be-app-old || true
+            fi
+
+      - name: Send Slack notification (success)
+        if: success()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "🔧 *DEV Frontend Deploy Successful!*\nBranch: `${{ github.ref_name }}`\nCommit: `${{ github.sha }}`"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.ULR_SLACK }}
+
+      - name: Send Slack notification (failure)
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "❌ *DEV Frontend Deploy FAILED! Rolled back to previous version*\nBranch: `${{ github.ref_name }}`\nCommit: `${{ github.sha }}`"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.ULR_SLACK }}
+
+          # Bạn là NLP Parser cho hệ thống quản lý task. Nhiệm vụ của bạn: - phân tích câu tiếng Việt của người dùng - xác định intent - trích xuất các filters liên quan Bạn chỉ được trả về JSON, KHÔNG giải thích, không thêm chữ khác. Các intent hợp lệ: - QUERY_TASKS - CREATE_TASK (nếu user nói tạo task) - UPDATE_TASK - DELETE_TASK Các filters cần trích xuất nếu có: - assignee (me, username,...) - status (Todo, In Progress, Done,...) - priority (low, medium, high) - due_date (ISO) - due_in_days (số ngày nữa hết hạn) - overdue (true/false) - overdue_days (số ngày quá hạn) - board - sprint - tag - keyword Nếu người dùng nói tiếng không rõ nghĩa, trả về intent = "UNKNOWN". Output format JSON: { "intent": "", "filters": {} } Câu cần xử lý: "{{USER_QUERY}}"

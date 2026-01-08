@@ -1,0 +1,133 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: ken-dev-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: ken_db_dev
+    command:
+      - mongod
+      - --replSet=rs0
+      - --bind_ip_all
+      - --wiredTigerCacheSizeGB=0.5
+      - --maxConns=500
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo-dev-data:/data/db
+      - mongo-dev-config:/data/configdb
+    networks:
+      - app-dev-network
+    healthcheck:
+      test:
+        ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  mongodb-init:
+    image: mongo:6.0
+    container_name: ken-dev-mongodb-init
+    restart: "no"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./scripts/init-replica-set.sh:/init-replica-set.sh:ro
+    entrypoint: ["/bin/bash", "/init-replica-set.sh"]
+    networks:
+      - app-dev-network
+
+  app-seed-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_VERSION: 18
+        NODE_ENV: development
+    image: ken-be-app-seed-dev:latest
+    container_name: ken-be-app-seed-dev
+    command: ["node", "scripts/seed/init-data.js"]
+    env_file:
+      - .env.development.docker
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mongodb-init:
+        condition: service_completed_successfully
+    networks:
+      - app-dev-network
+    restart: "no"
+
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_VERSION: 18
+        NODE_ENV: development
+    image: ken-be-app-dev:latest
+    container_name: ken-be-app-dev
+    restart: unless-stopped
+    env_file:
+      - .env.development.docker
+    volumes:
+      - ./:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+    ports:
+      - "3007:3007"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mongodb-init:
+        condition: service_completed_successfully
+    networks:
+      - app-dev-network
+
+  mongo-express:
+    image: mongo-express:1.0
+    container_name: ken-dev-mongo-express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27019/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+      ME_CONFIG_SITE_BASEURL: /mongo-express
+    ports:
+      - "8081:8081"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-dev-network
+    profiles:
+      - dev-ui
+    read_only: true
+    tmpfs:
+      - /tmp
+
+networks:
+  app-dev-network:
+    driver: bridge
+    name: ken-app-dev-network
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.30.0.0/16
+
+volumes:
+  mongo-dev-data:
+    name: ken-mongo-dev-data
+    driver: local
+
+  mongo-dev-config:
+    name: ken-mongo-dev-config
+    driver: local

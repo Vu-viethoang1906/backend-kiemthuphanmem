@@ -1,0 +1,179 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: ken-be-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: ken_db
+    command:
+      - mongod
+      - --replSet=rs0
+      - --bind_ip_all
+      - --wiredTigerCacheSizeGB=0.5
+      - --maxConns=500
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    networks:
+      - app-network
+    healthcheck:
+      test:
+        ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  mongodb-init:
+    image: mongo:6.0
+    container_name: ken-be-mongodb-init
+    restart: "no"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./scripts/init-replica-set.sh:/init-replica-set.sh:ro
+    entrypoint: ["/bin/bash", "/init-replica-set.sh"]
+    networks:
+      - app-network
+
+  app-seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+      args:
+        NODE_VERSION: 18
+        NODE_ENV: development
+    image: ken-be-app-seed:latest
+    container_name: ken-be-app-seed
+    command: ["node", "scripts/seed/init-data.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${PORT}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      KEYCLOAK_BASE_URL: ${KEYCLOAK_BASE_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI}
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASS: ${EMAIL_PASS}
+      ULR_FE: ${ULR_FE}
+      MONGO_URI: ${MONGO_URI}
+      MONGO_HOST: ${MONGO_HOST}
+      MONGO_PORT: ${MONGO_PORT}
+      VOLUME_DB_LIB: ${VOLUME_DB_LIB}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      VERSION: ${VERSION}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      GOOGLE_ENCRYPTION_KEY: ${GOOGLE_ENCRYPTION_KEY}
+
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mongodb-init:
+        condition: service_completed_successfully
+    networks:
+      - app-network
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_VERSION: 18
+        NODE_ENV: production
+    image: ken-be-app:latest
+    container_name: ken-be-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${PORT}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      KEYCLOAK_BASE_URL: ${KEYCLOAK_BASE_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI}
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASS: ${EMAIL_PASS}
+      ULR_FE: ${ULR_FE}
+      MONGO_URI: ${MONGO_URI}
+      MONGO_HOST: ${MONGO_HOST}
+      MONGO_PORT: ${MONGO_PORT}
+      VOLUME_DB_LIB: ${VOLUME_DB_LIB}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      VERSION: ${VERSION}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      GOOGLE_ENCRYPTION_KEY: ${GOOGLE_ENCRYPTION_KEY}
+    volumes:
+      - ./:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+    ports:
+      - "3005:3005"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mongodb-init:
+        condition: service_completed_successfully
+      app-seed:
+        condition: service_completed_successfully
+    networks:
+      - app-network
+
+  mongo-express:
+    image: mongo-express:1.0
+    container_name: ken-be-mongo-express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+      ME_CONFIG_SITE_BASEURL: /mongo-express
+    ports:
+      - "8081:8081"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-network
+    profiles:
+      - dev-ui
+    read_only: true
+    tmpfs:
+      - /tmp
+
+networks:
+  app-network:
+    driver: bridge
+    name: ken-app-network
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  mongo-data:
+    name: ken-mongo-data
+    driver: local
+
+  mongo-config:
+    name: ken-mongo-config
+    driver: local

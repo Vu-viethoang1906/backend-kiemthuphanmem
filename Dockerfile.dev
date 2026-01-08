@@ -1,0 +1,34 @@
+ARG NODE_VERSION=18
+ARG NODE_ENV=development
+
+FROM node:${NODE_VERSION}-alpine AS base
+
+WORKDIR /app
+
+# Cài dependencies
+COPY package*.json ./
+RUN npm install && npm install -g nodemon && npm cache clean --force
+
+# Copy toàn bộ source code
+COPY . .
+
+# Cài thêm công cụ hỗ trợ (nếu cần debug)
+RUN apk add --no-cache dumb-init bash && apk upgrade --no-cache
+
+# Tạo thư mục cần thiết
+RUN mkdir -p uploads logs
+
+# Thiết lập người dùng
+RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
+USER nodejs
+
+EXPOSE 3007
+
+ENV NODE_ENV=${NODE_ENV}
+
+# Healthcheck đơn giản
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3007', (r) => {process.exit(r.statusCode < 500 ? 0 : 1)})" || exit 1
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["npm", "run", "dev"]

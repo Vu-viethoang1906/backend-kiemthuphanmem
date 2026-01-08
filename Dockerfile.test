@@ -1,0 +1,66 @@
+# ----------------------------
+# Stage 1: Cài dependencies
+# ----------------------------
+ARG NODE_VERSION=18
+ARG NODE_ENV=test
+
+FROM node:${NODE_VERSION}-alpine AS dependencies
+
+WORKDIR /app
+
+# Chỉ copy file cần thiết để cài đặt dependencies
+COPY package*.json ./
+
+# Cài cả devDependencies vì môi trường test cần (ví dụ jest, eslint,…)
+RUN npm install && \
+    npm cache clean --force
+
+
+# ----------------------------
+# Stage 2: Chuẩn bị mã nguồn
+# ----------------------------
+FROM node:${NODE_VERSION}-alpine AS builder
+
+WORKDIR /app
+
+# Copy node_modules từ stage dependencies
+COPY --from=dependencies /app/node_modules ./node_modules
+
+# Copy toàn bộ mã nguồn
+COPY . .
+
+# Tạo thư mục uploads, logs (tránh lỗi khi test)
+RUN mkdir -p uploads logs
+
+
+# ----------------------------
+# Stage 3: Test stage
+# ----------------------------
+FROM node:${NODE_VERSION}-alpine AS test
+
+# Tạo user nodejs (UID:1001)
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 -G nodejs
+
+WORKDIR /app
+
+# Copy toàn bộ mã từ builder
+COPY --from=builder /app ./
+
+# Copy entrypoint script
+COPY --chown=nodejs:nodejs ./docker-entrypoint-test.sh /docker-entrypoint-test.sh
+RUN chmod +x /docker-entrypoint-test.sh
+
+# Gán quyền để user nodejs có thể ghi file (fix lỗi EACCES)
+RUN chown -R nodejs:nodejs /app
+
+USER nodejs
+
+ENV NODE_ENV=${NODE_ENV}
+
+# Expose port để healthcheck (nếu cần)
+EXPOSE 3006
+
+# Không sử dụng ENTRYPOINT - chỉ dùng CMD
+# GitHub Actions sẽ chạy: docker exec ken-be-app-test npm run test:coverage
+CMD ["tail", "-f", "/dev/null"]

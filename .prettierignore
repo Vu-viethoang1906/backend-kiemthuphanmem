@@ -1,0 +1,12 @@
+node_modules/
+coverage/
+dist/
+build/
+uploads/
+.next/
+.husky/
+.git/
+Dockerfile*
+*.log
+env.*
+/.vscode/
