@@ -2,6 +2,14 @@
 const mongoose = require('mongoose');
 
 // Mock dependencies BEFORE requiring the service
+jest.mock('bcrypt', () => ({
+  compareSync: jest.fn(),
+  hashSync: jest.fn(),
+  compare: jest.fn(),
+  hash: jest.fn(),
+}));
+
+jest.mock('fs');
 jest.mock('../../repositories/scheduledReport.repository');
 jest.mock('../../services/export.service');
 jest.mock('../../config/mailer', () => ({
@@ -13,6 +21,7 @@ const ScheduledReportService = require('../../services/scheduledReport.service')
 const scheduledReportRepo = require('../../repositories/scheduledReport.repository');
 const exportService = require('../../services/export.service');
 const { sendMail } = require('../../config/mailer');
+const fs = require('fs');
 
 describe('🔹 Scheduled Report Service Unit Tests', () => {
   let mockUserId;
@@ -22,6 +31,9 @@ describe('🔹 Scheduled Report Service Unit Tests', () => {
     jest.clearAllMocks();
     mockUserId = new mongoose.Types.ObjectId();
     mockBoardId = new mongoose.Types.ObjectId();
+
+    // Mock fs.readFileSync to return a dummy buffer
+    fs.readFileSync.mockReturnValue(Buffer.from('dummy pdf content'));
   });
 
   describe('calculateNextSendTime', () => {

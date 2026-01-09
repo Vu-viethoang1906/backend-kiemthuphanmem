@@ -68,19 +68,37 @@ describe('🔹 Export Service Unit Tests', () => {
 
     // Mock fs.createWriteStream
     mockWriteStream = {
-      on: jest.fn(),
-      write: jest.fn(),
-      end: jest.fn(),
+      on: jest.fn().mockReturnThis(),
+      write: jest.fn().mockReturnThis(),
+      end: jest.fn().mockImplementation(function () {
+        // Simulate finish event after end() is called
+        setTimeout(() => {
+          const finishCallback = this.on.mock.calls.find(call => call[0] === 'finish')?.[1];
+          if (finishCallback) {
+            finishCallback();
+          }
+        }, 0);
+        return this;
+      }),
     };
     fs.createWriteStream = jest.fn().mockReturnValue(mockWriteStream);
 
     // Mock PDFDocument
+    let pipedStream;
     mockPDFDoc = {
-      pipe: jest.fn().mockReturnThis(),
+      pipe: jest.fn().mockImplementation(function (s) {
+        pipedStream = s;
+        return this;
+      }),
       fontSize: jest.fn().mockReturnThis(),
       text: jest.fn().mockReturnThis(),
       moveDown: jest.fn().mockReturnThis(),
       end: jest.fn().mockImplementation(function () {
+        // When PDF ends, it should end the stream it's piped to
+        if (pipedStream && pipedStream.end) {
+          pipedStream.end();
+        }
+
         // Simulate end event after end() is called
         setTimeout(() => {
           const endCallback = this.on.mock.calls.find(call => call[0] === 'end')?.[1];

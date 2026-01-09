@@ -8,7 +8,6 @@ const UserActivityPatternSchema = new Schema(
       ref: 'User',
       required: true,
       unique: true,
-      index: true,
     },
     // Active hours - giờ hoạt động thường xuyên (0-23)
     active_hours: {

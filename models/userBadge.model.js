@@ -7,19 +7,16 @@ const UserBadgeSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true,
     },
     badge_id: {
       type: Schema.Types.ObjectId,
       ref: 'Badge',
       required: true,
-      index: true,
     },
     center_id: {
       type: Schema.Types.ObjectId,
       ref: 'Center',
       required: true,
-      index: true,
     },
     metadata: {
       type: Schema.Types.Mixed,
@@ -50,6 +47,3 @@ UserBadgeSchema.pre(/^find/, function (next) {
 });
 
 module.exports = mongoose.model('UserBadge', UserBadgeSchema);
-
-
-

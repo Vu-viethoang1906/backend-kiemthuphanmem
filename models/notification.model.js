@@ -7,7 +7,6 @@ const NotificationSchema = new mongoose.Schema(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true,
     },
     title: { type: String, maxlength: 200 },
     body: { type: String, maxlength: 1000 },

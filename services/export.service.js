@@ -363,6 +363,10 @@ class ExportService {
         reject(err);
       });
 
+      doc.on('end', () => {
+        // PDF generation finished
+      });
+
       doc.pipe(stream);
 
       // ===== CONTENT =====

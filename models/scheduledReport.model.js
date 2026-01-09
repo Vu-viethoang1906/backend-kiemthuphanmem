@@ -7,13 +7,11 @@ const ScheduledReportSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true,
     },
     board_id: {
       type: Schema.Types.ObjectId,
       ref: 'Board',
       required: true,
-      index: true,
     },
     report_type: {
       type: String,

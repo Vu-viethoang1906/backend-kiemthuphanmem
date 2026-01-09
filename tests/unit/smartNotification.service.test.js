@@ -5,8 +5,12 @@ const mongoose = require('mongoose');
 jest.mock('../../repositories/notificationPreference.repository');
 jest.mock('../../services/userActivityPattern.service');
 jest.mock('../../repositories/notification.repository');
+jest.mock('../../models/activityLog.model', () => ({
+  countDocuments: jest.fn(),
+}));
 jest.mock('../../config/socket', () => ({
   emitToUser: jest.fn(),
+  isUserOnline: jest.fn().mockReturnValue(true),
 }));
 
 // Now require the service after mocks are set up

@@ -7,13 +7,11 @@ const AtRiskTaskSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'Task',
       required: true,
-      index: true,
     },
     board_id: {
       type: Schema.Types.ObjectId,
       ref: 'Board',
       required: true,
-      index: true,
     },
     risk_score: {
       type: Number,

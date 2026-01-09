@@ -7,19 +7,16 @@ const UserSkillSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true,
     },
     center_id: {
       type: Schema.Types.ObjectId,
       ref: 'Center',
       required: true,
-      index: true,
     },
     skill_id: {
       type: Schema.Types.ObjectId,
       ref: 'Skill',
       required: true,
-      index: true,
     },
     proficiency_level: {
       type: Number,
@@ -75,4 +72,3 @@ UserSkillSchema.pre(/^find/, function (next) {
 });
 
 module.exports = mongoose.model('UserSkill', UserSkillSchema);
-

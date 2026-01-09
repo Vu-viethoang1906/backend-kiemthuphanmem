@@ -14,22 +14,25 @@ if (process.env.NODE_ENV === 'test') {
   });
 
   logger = pino({ level: process.env.LOG_LEVEL || 'info' }, noop);
-} else {
-  // In non-test environments, initialize the Elasticsearch stream
+} else if (process.env.ELASTICSEARCH_URL) {
+  // In non-test environments, initialize the Elasticsearch stream only if URL is provided
   const pinoElastic = require('pino-elasticsearch');
 
   const streamToElastic = pinoElastic({
-    node: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
+    node: process.env.ELASTICSEARCH_URL,
     index: process.env.ELASTICSEARCH_INDEX || 'nodejs-logs',
     esVersion: 7,
     flushBytes: 1000,
   });
 
   streamToElastic.on('error', err => {
-    console.error('Error writing to Elasticsearch', err);
+    // Only log the message to avoid flooding the console with full stack traces during connection issues
   });
 
   logger = pino({ level: process.env.LOG_LEVEL || 'info' }, streamToElastic);
+} else {
+  // Default to standard pino (stdout) if no Elasticsearch is configured
+  logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 }
 
 module.exports = logger;

@@ -1,27 +1,25 @@
-const taskService = require("../services/task.service");
-const Task = require("../models/task.model");
-const taskTag = require("../repositories/taskTag.repository");
-const taskTagRepo = require("../repositories/taskTag.repository");
-const queryParser = require("../utils/queryParser");
-const { sendMail } = require("../config/mailer");
-const activityLogService = require("../services/activityLog.service");
+const taskService = require('../services/task.service');
+const Task = require('../models/task.model');
+const taskTag = require('../repositories/taskTag.repository');
+const taskTagRepo = require('../repositories/taskTag.repository');
+const queryParser = require('../utils/queryParser');
+const { sendMail } = require('../config/mailer');
+const activityLogService = require('../services/activityLog.service');
 class TaskController {
   // Tạo task mới
   async create(req, res) {
     try {
       const userId = req.user?.id;
       if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
       }
 
       const taskData = req.body;
       const task = await taskService.createTask(taskData, userId);
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã tạo task mới",
-        target_type: "Task",
+        action: 'đã tạo task mới',
+        target_type: 'Task',
         target_id: task._id,
       });
       // nếu gửi cả tag theo dạng tên task thì gán vào luôn
@@ -31,7 +29,7 @@ class TaskController {
 
       res.status(201).json({
         success: true,
-        message: "Tạo task thành công",
+        message: 'Tạo task thành công',
         data: task,
       });
     } catch (error) {
@@ -50,8 +48,8 @@ class TaskController {
       const task = await taskService.getTaskById(id);
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã lấy chi tiết task",
-        target_type: "Task",
+        action: 'đã lấy chi tiết task',
+        target_type: 'Task',
         target_id: task._id,
       });
       res.json({
@@ -73,41 +71,37 @@ class TaskController {
       const userId = req.user?.id;
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã lấy danh sách task theo board",
-        target_type: "Board",
+        action: 'đã lấy danh sách task theo board',
+        target_type: 'Board',
         target_id: board_id,
       });
       // Parse query params với queryParser
       const parsed = queryParser.parseQuery(req.query, {
         allowedFilters: [
-          "column_id",
-          "swimlane_id",
-          "assigned_to",
-          "created_by",
-          "priority",
-          "assigned_to",
+          'column_id',
+          'swimlane_id',
+          'assigned_to',
+          'created_by',
+          'priority',
+          'assigned_to',
         ],
-        allowedSortFields: [
-          "position",
-          "created_at",
-          "due_date",
-          "priority",
-          "title",
-        ],
+        allowedSortFields: ['position', 'created_at', 'due_date', 'priority', 'title'],
         maxLimit: 200,
         defaults: {
           page: 1,
           limit: 50,
-          sortBy: "position",
-          sortOrder: "asc",
+          sortBy: 'position',
+          sortOrder: 'asc',
         },
       });
 
       // Validate ObjectId filters
-      const validatedFilter = queryParser.validateObjectIdFields(
-        parsed.filter,
-        ["column_id", "swimlane_id", "assigned_to", "created_by"]
-      );
+      const validatedFilter = queryParser.validateObjectIdFields(parsed.filter, [
+        'column_id',
+        'swimlane_id',
+        'assigned_to',
+        'created_by',
+      ]);
 
       // Get tasks from service
       const result = await taskService.getTasksByBoard(board_id, {
@@ -121,9 +115,7 @@ class TaskController {
       });
 
       // Build deep link response
-      const baseUrl = `${req.protocol}://${req.get("host")}${req.baseUrl}${
-        req.path
-      }`;
+      const baseUrl = `${req.protocol}://${req.get('host')}${req.baseUrl}${req.path}`;
       const response = queryParser.buildDeepLinkResponse(
         result.tasks,
         req.query,
@@ -158,8 +150,8 @@ class TaskController {
       const userId = req.user?.id;
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã lấy danh sách task theo column",
-        target_type: "Column",
+        action: 'đã lấy danh sách task theo column',
+        target_type: 'Column',
         target_id: column_id,
       });
       res.json({
@@ -180,9 +172,7 @@ class TaskController {
     try {
       const userId = req.user?.id;
       if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
       }
 
       const tasks = await taskService.getTasksByUser(userId);
@@ -208,7 +198,7 @@ class TaskController {
       await activityLogService.createActivityLog({
         user_id: currentUserId,
         action: `đã lấy danh sách task của user ${user_id}`,
-        target_type: "User",
+        target_type: 'User',
         target_id: user_id,
       });
       // Kiểm tra quyền: chỉ admin hoặc chính user đó mới xem được
@@ -239,14 +229,12 @@ class TaskController {
       const updateData = req.body;
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã cập nhật task",
-        target_type: "Task",
+        action: 'đã cập nhật task',
+        target_type: 'Task',
         target_id: id,
       });
       if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
       }
 
       // 1️⃣ Cập nhật thông tin cơ bản của task
@@ -266,7 +254,7 @@ class TaskController {
 
       res.json({
         success: true,
-        message: "Cập nhật task thành công",
+        message: 'Cập nhật task thành công',
         data: updatedTask,
       });
     } catch (error) {
@@ -284,21 +272,19 @@ class TaskController {
       const userId = req.user?.id;
 
       if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
       }
 
       await taskService.deleteTask(id, userId);
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã xóa task",
-        target_type: "Task",
+        action: 'đã xóa task',
+        target_type: 'Task',
         target_id: id,
       });
       res.json({
         success: true,
-        message: "Xóa task thành công",
+        message: 'Xóa task thành công',
       });
     } catch (error) {
       res.status(400).json({
@@ -312,20 +298,17 @@ class TaskController {
   async moveTask(req, res) {
     try {
       const { id } = req.params;
-      const { new_column_id, new_swimlane_id, prev_task_id, next_task_id } =
-        req.body;
+      const { new_column_id, new_swimlane_id, prev_task_id, next_task_id } = req.body;
       const userId = req.user?.id;
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã di chuyển task",
-        target_type: "Task",
+        action: 'đã di chuyển task',
+        target_type: 'Task',
         target_id: id,
       });
 
       if (!userId)
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
 
       const movedTask = await taskService.moveTask(
         id,
@@ -338,7 +321,7 @@ class TaskController {
 
       res.json({
         success: true,
-        message: "Di chuyển task thành công",
+        message: 'Di chuyển task thành công',
         data: movedTask,
       });
     } catch (error) {
@@ -355,13 +338,13 @@ class TaskController {
       await activityLogService.createActivityLog({
         user_id: userId,
         action: `đã tìm kiếm task với từ khóa: ${searchQuery}`,
-        target_type: "Board",
+        target_type: 'Board',
         target_id: board_id,
       });
       if (!searchQuery) {
         return res.status(400).json({
           success: false,
-          message: "Từ khóa tìm kiếm là bắt buộc",
+          message: 'Từ khóa tìm kiếm là bắt buộc',
         });
       }
 
@@ -406,25 +389,19 @@ class TaskController {
       const userId = req.user?.id;
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã cập nhật ngày bắt đầu/kết thúc của task",
-        target_type: "Task",
+        action: 'đã cập nhật ngày bắt đầu/kết thúc của task',
+        target_type: 'Task',
         target_id: id,
       });
       if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
       }
 
-      const updatedTask = await taskService.updateTask(
-        id,
-        { start_date, due_date },
-        userId
-      );
+      const updatedTask = await taskService.updateTask(id, { start_date, due_date }, userId);
 
       res.json({
         success: true,
-        message: "Cập nhật ngày thành công",
+        message: 'Cập nhật ngày thành công',
         data: updatedTask,
       });
     } catch (error) {
@@ -443,32 +420,26 @@ class TaskController {
       const userId = req.user?.id;
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã cập nhật thời gian ước tính của task",
-        target_type: "Task",
+        action: 'đã cập nhật thời gian ước tính của task',
+        target_type: 'Task',
         target_id: id,
       });
       if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
       }
 
       if (estimate_hours === undefined || estimate_hours === null) {
         return res.status(400).json({
           success: false,
-          message: "estimate_hours là bắt buộc",
+          message: 'estimate_hours là bắt buộc',
         });
       }
 
-      const updatedTask = await taskService.updateTask(
-        id,
-        { estimate_hours },
-        userId
-      );
+      const updatedTask = await taskService.updateTask(id, { estimate_hours }, userId);
 
       res.json({
         success: true,
-        message: "Cập nhật thời gian ước tính thành công",
+        message: 'Cập nhật thời gian ước tính thành công',
         data: updatedTask,
       });
     } catch (error) {
@@ -488,8 +459,8 @@ class TaskController {
       const userId = req.user?.id;
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã lấy danh sách task theo column trong board",
-        target_type: "Column",
+        action: 'đã lấy danh sách task theo column trong board',
+        target_type: 'Column',
         target_id: column_id,
       });
       const tasks = await Task.find({
@@ -497,9 +468,9 @@ class TaskController {
         column_id,
         deleted_at: null, // nếu bạn lưu soft delete
       })
-        .populate("created_by", "username full_name")
-        .populate("assigned_to", "username full_name")
-        .populate("swimlane_id", "name");
+        .populate('created_by', 'username full_name')
+        .populate('assigned_to', 'username full_name')
+        .populate('swimlane_id', 'name');
 
       tasks.sort((a, b) => {
         if (a.swimlane_id.name < b.swimlane_id.name) return -1;
@@ -514,7 +485,7 @@ class TaskController {
     } catch (error) {
       res.status(500).json({
         success: false,
-        message: "Lỗi khi lấy task theo column trong board",
+        message: 'Lỗi khi lấy task theo column trong board',
       });
     }
   }
@@ -522,9 +493,7 @@ class TaskController {
   async getDataLineChart(req, res) {
     const idBoard = req.params.board_id;
     if (!idBoard) {
-      return res
-        .status(400)
-        .json({ success: false, message: "board_id là bắt buộc" });
+      return res.status(400).json({ success: false, message: 'board_id là bắt buộc' });
     }
 
     try {
@@ -532,10 +501,9 @@ class TaskController {
       res.json({ success: true, data: result });
     } catch (error) {
       // nếu dùng TypeScript
-      console.error("Lỗi getDataLineChart:", error); // log ra console server
       res.status(500).json({
         success: false,
-        message: "Lỗi khi lấy task theo column trong board",
+        message: 'Lỗi khi lấy task theo column trong board',
         error: error.message || error.toString(), // in chi tiết lỗi ra client
       });
     }
@@ -548,9 +516,7 @@ class TaskController {
 
       const userId = req.user?.id;
       if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
       }
 
       const history = await taskService.getTaskHistory(id, userId);
@@ -563,7 +529,7 @@ class TaskController {
     } catch (error) {
       res.status(500).json({
         success: false,
-        message: "Lỗi khi lấy lịch sử task",
+        message: 'Lỗi khi lấy lịch sử task',
         error: error.message || error.toString(),
       });
     }
@@ -575,31 +541,23 @@ class TaskController {
       const userId = req.user?.id;
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã tải lên file đính kèm cho task",
-        target_type: "Task",
+        action: 'đã tải lên file đính kèm cho task',
+        target_type: 'Task',
         target_id: taskId,
       });
       if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
       }
 
       if (!req.file) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Chưa có file đính kèm" });
+        return res.status(400).json({ success: false, message: 'Chưa có file đính kèm' });
       }
 
-      const attachment = await taskService.addAttachment(
-        taskId,
-        req.file,
-        userId
-      );
+      const attachment = await taskService.addAttachment(taskId, req.file, userId);
 
       res.status(201).json({
         success: true,
-        message: "Tải lên file đính kèm thành công",
+        message: 'Tải lên file đính kèm thành công',
         data: attachment,
       });
     } catch (error) {
@@ -616,20 +574,16 @@ class TaskController {
       const userId = req.user?.id;
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã lấy danh sách file đính kèm của task",
-        target_type: "Task",
+        action: 'đã lấy danh sách file đính kèm của task',
+        target_type: 'Task',
         target_id: taskId,
       });
       if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
       }
       const task = await taskService.getTaskById(taskId);
       if (!task) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Không tìm thấy task" });
+        return res.status(404).json({ success: false, message: 'Không tìm thấy task' });
       }
 
       const attachments = task.attachments || [];
@@ -646,34 +600,27 @@ class TaskController {
     try {
       const { taskId } = req.params;
       // Hỗ trợ cả query parameter và body
-      const attachmentIndex =
-        req.query.attachmentIndex || req.body.attachmentIndex;
+      const attachmentIndex = req.query.attachmentIndex || req.body.attachmentIndex;
       const userId = req.user?.id;
       await activityLogService.createActivityLog({
         user_id: userId,
-        action: "đã xóa file đính kèm của task",
-        target_type: "Task",
+        action: 'đã xóa file đính kèm của task',
+        target_type: 'Task',
         target_id: taskId,
       });
 
       if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Không có quyền truy cập" });
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
       }
 
       if (attachmentIndex === undefined || attachmentIndex === null) {
         return res.status(400).json({
           success: false,
-          message: "Thiếu thông tin attachment index",
+          message: 'Thiếu thông tin attachment index',
         });
       }
 
-      const result = await taskService.deleteAttachment(
-        taskId,
-        parseInt(attachmentIndex),
-        userId
-      );
+      const result = await taskService.deleteAttachment(taskId, parseInt(attachmentIndex), userId);
 
       res.json({
         success: true,

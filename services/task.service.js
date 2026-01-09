@@ -128,24 +128,32 @@ class TaskService {
 
         if (taskData.start_date) {
           // Loại bỏ string "Invalid Date" hoặc empty string
-          if (taskData.start_date === 'Invalid Date' || taskData.start_date === '' || taskData.start_date === null) {
+          if (
+            taskData.start_date === 'Invalid Date' ||
+            taskData.start_date === '' ||
+            taskData.start_date === null
+          ) {
             taskData.start_date = undefined;
           } else {
-          startDate = new Date(taskData.start_date);
-          if (isNaN(startDate.getTime())) {
-            throw new Error('Ngày bắt đầu không hợp lệ');
+            startDate = new Date(taskData.start_date);
+            if (isNaN(startDate.getTime())) {
+              throw new Error('Ngày bắt đầu không hợp lệ');
             }
           }
         }
 
         if (taskData.due_date) {
           // Loại bỏ string "Invalid Date" hoặc empty string
-          if (taskData.due_date === 'Invalid Date' || taskData.due_date === '' || taskData.due_date === null) {
+          if (
+            taskData.due_date === 'Invalid Date' ||
+            taskData.due_date === '' ||
+            taskData.due_date === null
+          ) {
             taskData.due_date = undefined;
           } else {
-          dueDate = new Date(taskData.due_date);
-          if (isNaN(dueDate.getTime())) {
-            throw new Error('Ngày kết thúc không hợp lệ');
+            dueDate = new Date(taskData.due_date);
+            if (isNaN(dueDate.getTime())) {
+              throw new Error('Ngày kết thúc không hợp lệ');
             }
           }
         }
@@ -347,12 +355,16 @@ class TaskService {
         // Parse start_date
         if (updateData.start_date) {
           // Loại bỏ string "Invalid Date" hoặc empty string
-          if (updateData.start_date === 'Invalid Date' || updateData.start_date === '' || updateData.start_date === null) {
+          if (
+            updateData.start_date === 'Invalid Date' ||
+            updateData.start_date === '' ||
+            updateData.start_date === null
+          ) {
             updateData.start_date = undefined;
           } else {
-          startDate = new Date(updateData.start_date);
-          if (isNaN(startDate.getTime())) {
-            throw new Error('Ngày giờ bắt đầu không hợp lệ');
+            startDate = new Date(updateData.start_date);
+            if (isNaN(startDate.getTime())) {
+              throw new Error('Ngày giờ bắt đầu không hợp lệ');
             }
           }
         } else if (existingTask.start_date) {
@@ -362,12 +374,16 @@ class TaskService {
         // Parse due_date
         if (updateData.due_date) {
           // Loại bỏ string "Invalid Date" hoặc empty string
-          if (updateData.due_date === 'Invalid Date' || updateData.due_date === '' || updateData.due_date === null) {
+          if (
+            updateData.due_date === 'Invalid Date' ||
+            updateData.due_date === '' ||
+            updateData.due_date === null
+          ) {
             updateData.due_date = undefined;
           } else {
-          dueDate = new Date(updateData.due_date);
-          if (isNaN(dueDate.getTime())) {
-            throw new Error('Ngày giờ kết thúc không hợp lệ');
+            dueDate = new Date(updateData.due_date);
+            if (isNaN(dueDate.getTime())) {
+              throw new Error('Ngày giờ kết thúc không hợp lệ');
             }
           }
         } else if (existingTask.due_date) {
@@ -512,9 +528,7 @@ class TaskService {
       setImmediate(async () => {
         try {
           await atRiskDetectionService.detectAtRiskTasks(updatedTask.board_id.toString());
-        } catch (err) {
-          console.error('Lỗi detect at-risk task:', err);
-        }
+        } catch (err) {}
       });
 
       return updatedTask;
@@ -569,13 +583,11 @@ class TaskService {
         }
       } catch (calendarError) {}
     }
-    const Task = await taskRepo.findById(id);
-    if (!task) return;
     // lưu lịch sử
     await historyTaskService.createHistoryTask({
       task_id: id,
       changed_by: userId,
-      change_type: `đã xóa task ${Task.title}`,
+      change_type: `đã xóa task ${task.title}`,
     });
     // Soft delete instead of hard delete
     return await taskRepo.softDelete(id);
@@ -840,24 +852,22 @@ class TaskService {
 
               const userPoint = await userPointRepo.findByUserAndCenter(userId, centerId);
               const totalPoints = userPoint?.total_points || 0;
-              
+
               const doneColumn = await columnRepo.getDoneColumnByBoard(boardId);
               const completedTasks = doneColumn
-                ? await Task.countDocuments({ assigned_to: userId, column_id: doneColumn._id, deleted_at: null })
+                ? await Task.countDocuments({
+                    assigned_to: userId,
+                    column_id: doneColumn._id,
+                    deleted_at: null,
+                  })
                 : 0;
 
-              await behaviorService.trackBehavior(
-                userId,
-                centerId,
-                'complete_task',
-                'points',
-                {
-                  task_id: task_id,
-                  points_earned: pointsPerTask,
-                  total_points: totalPoints,
-                  completion_time: new Date(),
-                }
-              );
+              await behaviorService.trackBehavior(userId, centerId, 'complete_task', 'points', {
+                task_id: task_id,
+                points_earned: pointsPerTask,
+                total_points: totalPoints,
+                completion_time: new Date(),
+              });
 
               const awardedBadges = await badgeService.checkAndAwardBadges(
                 userId,
@@ -871,17 +881,11 @@ class TaskService {
 
               if (awardedBadges.length > 0) {
                 for (const badge of awardedBadges) {
-                  await behaviorService.trackBehavior(
-                    userId,
-                    centerId,
-                    'earn_badge',
-                    'badge',
-                    {
-                      badge_id: badge._id,
-                      badge_name: badge.name,
-                      reaction: 'positive',
-                    }
-                  );
+                  await behaviorService.trackBehavior(userId, centerId, 'earn_badge', 'badge', {
+                    badge_id: badge._id,
+                    badge_name: badge.name,
+                    reaction: 'positive',
+                  });
                 }
               }
             }
@@ -913,9 +917,7 @@ class TaskService {
             titleTask,
             boardName
           );
-        } catch (mailErr) {
-          console.error('❌ Lỗi khi gửi email:', mailErr);
-        }
+        } catch (mailErr) {}
       }
 
       // ====== Gửi thông báo real-time qua Socket và lưu vào Database ======
@@ -930,7 +932,7 @@ class TaskService {
             // 1️⃣ Tạo notification trong database
             const notificationData = {
               user_id: memberId.toString(),
-              title: `Task được di chuyển`,
+              title: 'Task được di chuyển',
               body: notificationMessage,
               type: 'task_moved',
               board_id: boardId.toString(),
@@ -957,9 +959,7 @@ class TaskService {
               },
               memberId.toString()
             );
-          } catch (socketErr) {
-            console.error('❌ Lỗi khi gửi notification:', socketErr);
-          }
+          } catch (socketErr) {}
         }
       }
 
@@ -972,14 +972,11 @@ class TaskService {
       setImmediate(async () => {
         try {
           await atRiskDetectionService.detectAtRiskTasks(movedTask.board_id.toString());
-        } catch (err) {
-          console.error('Lỗi detect at-risk task:', err);
-        }
+        } catch (err) {}
       });
 
       return { success: true, data: movedTask };
     } catch (error) {
-      console.error('🔥 Lỗi di chuyển task:', error);
       throw new Error(`Lỗi di chuyển task: ${error.message}`);
     }
   }
@@ -1136,9 +1133,7 @@ class TaskService {
       if (fs.existsSync(filePath)) {
         try {
           fs.unlinkSync(filePath);
-        } catch (err) {
-          console.error('Lỗi khi xóa file:', err);
-        }
+        } catch (err) {}
       }
     }
 
