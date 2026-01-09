@@ -511,7 +511,9 @@ class ExportService {
           fs.unlinkSync(filePath);
           deletedCount++;
         }
-      } catch (error) {}
+      } catch (error) {
+        console.error(`Lỗi khi dọn dẹp file ${file}:`, error);
+      }
     }
 
     return deletedCount;
@@ -555,7 +557,9 @@ class ExportService {
           reportType,
           expiresAt: new Date(stats.mtimeMs + maxAge).toISOString(),
         });
-      } catch (error) {}
+      } catch (error) {
+        console.error(`Lỗi khi lấy thông tin file ${file}:`, error);
+      }
     }
 
     return results.sort((a, b) => (a.expiresAt > b.expiresAt ? -1 : 1));
