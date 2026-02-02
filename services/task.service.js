@@ -19,6 +19,9 @@ const historyTaskService = require('../services/historyTask.service');
 const multer = require('multer');
 const gamificationConfigService = require('../services/gamificationConfig.service');
 const atRiskDetectionService = require('../services/atRiskDetection.service');
+const behaviorService = require('./gamificationBehavior.service');
+const badgeService = require('./badge.service');
+const Task = require('../models/task.model');
 class TaskService {
   // Helper: Calculate isOverdue for a task
   _calculateIsOverdue(task, column) {
@@ -833,74 +836,141 @@ class TaskService {
       const isGamificationEnabled = await gamificationConfigService.isEnabled();
 
       if (doneColumnId && isGamificationEnabled) {
-        const qualityTasknewDone = await taskRepo.countTask(doneColumnId, boardId);
-
         // Lấy điểm thưởng từ config
         const pointsPerTask = await gamificationConfigService.getPointsPerTask();
         const pointsDeduction = await gamificationConfigService.getPointsDeduction();
 
+        // Lấy thông tin task sau khi cập nhật
+        const taskData = await taskRepo.findById(task_id);
+        const userId = taskData?.assigned_to?._id || taskData?.assigned_to;
+
+        // Kiểm tra task có done_at trước đó không (để biết task đã từng done chưa)
+        const hadDoneAtBefore = task.done_at !== null && task.done_at !== undefined;
+
         // 🟢 Kéo task vào cột Done → cộng điểm
-        if (newisDone && qualityTasknewDone > qualityTask) {
-          const taskData = await taskRepo.findById(task_id);
-          const userId = taskData?.assigned_to?._id || taskData?.assigned_to;
-
-          if (userId) {
-            const centerMember = await CenterMemberRepo.findByUserId(userId);
-            if (centerMember?.length > 0) {
-              const centerId = centerMember[0].center_id || centerMember[0]._id;
-              await userPointRepo.updatePoint(userId, centerId, pointsPerTask);
-
-              const userPoint = await userPointRepo.findByUserAndCenter(userId, centerId);
-              const totalPoints = userPoint?.total_points || 0;
-
-              const doneColumn = await columnRepo.getDoneColumnByBoard(boardId);
-              const completedTasks = doneColumn
-                ? await Task.countDocuments({
-                    assigned_to: userId,
-                    column_id: doneColumn._id,
-                    deleted_at: null,
-                  })
-                : 0;
-
-              await behaviorService.trackBehavior(userId, centerId, 'complete_task', 'points', {
-                task_id: task_id,
-                points_earned: pointsPerTask,
-                total_points: totalPoints,
-                completion_time: new Date(),
-              });
-
-              const awardedBadges = await badgeService.checkAndAwardBadges(
-                userId,
-                centerId,
-                'complete_task',
-                {
-                  completed_tasks: completedTasks,
-                  total_points: totalPoints,
-                }
-              );
-
-              if (awardedBadges.length > 0) {
-                for (const badge of awardedBadges) {
-                  await behaviorService.trackBehavior(userId, centerId, 'earn_badge', 'badge', {
-                    badge_id: badge._id,
-                    badge_name: badge.name,
-                    reaction: 'positive',
-                  });
-                }
-              }
+        // Chỉ cộng điểm nếu:
+        // 1. Task được kéo vào cột Done (newisDone === true)
+        // 2. Task chưa từng done trước đó (hadDoneAtBefore === false)
+        if (newisDone && !hadDoneAtBefore && userId) {
+          // Lấy center_id từ CenterMember hoặc từ User model
+          let centerId = null;
+          
+          // Thử lấy từ CenterMember trước
+          const centerMember = await CenterMemberRepo.findByUserId(userId);
+          if (centerMember && centerMember.length > 0) {
+            // Lấy center_id từ centerMember (có thể là object đã populate hoặc ObjectId)
+            const cm = centerMember[0];
+            centerId = cm.center_id?._id || cm.center_id;
+            console.log(`✅ Tìm thấy center_id từ CenterMember cho user ${userId}:`, centerId);
+          }
+          
+          // Nếu không có centerMember, lấy từ User model
+          if (!centerId) {
+            const assignedUser = await userService.getUserById(userId);
+            if (assignedUser) {
+              centerId = assignedUser.center_id?._id || assignedUser.center_id;
+              console.log(`✅ Tìm thấy center_id từ User model cho user ${userId}:`, centerId);
             }
           }
-        } else if (!newisDone && qualityTasknewDone < qualityTask) {
-          // 🔴 Kéo task ra khỏi cột Done → trừ điểm
-          const taskData = await taskRepo.findById(task_id);
-          const userId = taskData?.assigned_to?._id || taskData?.assigned_to;
 
-          if (userId) {
-            const centerMember = await CenterMemberRepo.findByUserId(userId);
-            if (centerMember?.length > 0) {
-              const centerId = centerMember[0].center_id || centerMember[0]._id;
-              await userPointRepo.updatePoint(userId, centerId, -pointsDeduction);
+          // Nếu vẫn có centerId, cộng điểm
+          if (centerId) {
+            try {
+              console.log(`🔄 Đang cộng ${pointsPerTask} điểm cho user ${userId} tại center ${centerId}`);
+              // Cộng điểm cho user (sẽ tự động tạo UserPoint nếu chưa có)
+              const updateResult = await userPointRepo.updatePoint(userId, centerId, pointsPerTask);
+              
+              // updatePoint luôn trả về object với success
+              if (updateResult && updateResult.success === true) {
+                console.log(`✅ Đã cộng điểm thành công cho user ${userId}, center ${centerId}`);
+                // Lấy thông tin userPoint sau khi cập nhật
+                const userPoint = await userPointRepo.findByUserAndCenter(userId, centerId);
+                const totalPoints = userPoint?.total_points || 0;
+
+                // Đếm số task đã hoàn thành của user
+                const doneColumn = await columnRepo.getDoneColumnByBoard(boardId);
+                const completedTasks = doneColumn
+                  ? await Task.countDocuments({
+                      assigned_to: userId,
+                      column_id: doneColumn._id,
+                      deleted_at: null,
+                    })
+                  : 0;
+
+                // Track behavior nếu có behaviorService
+                try {
+                  await behaviorService.trackBehavior(userId, centerId, 'complete_task', 'points', {
+                    task_id: task_id,
+                    points_earned: pointsPerTask,
+                    total_points: totalPoints,
+                    completion_time: new Date(),
+                  });
+
+                  // Kiểm tra và trao badge
+                  const awardedBadges = await badgeService.checkAndAwardBadges(
+                    userId,
+                    centerId,
+                    'complete_task',
+                    {
+                      completed_tasks: completedTasks,
+                      total_points: totalPoints,
+                    }
+                  );
+
+                  if (awardedBadges && awardedBadges.length > 0) {
+                    for (const badge of awardedBadges) {
+                      await behaviorService.trackBehavior(userId, centerId, 'earn_badge', 'badge', {
+                        badge_id: badge._id,
+                        badge_name: badge.name,
+                        reaction: 'positive',
+                      });
+                    }
+                  }
+                } catch (behaviorError) {
+                  // Log lỗi nhưng không block việc cộng điểm
+                  console.error('❌ Lỗi khi track behavior:', behaviorError);
+                }
+              } else {
+                console.error(`❌ Không thể cộng điểm cho user ${userId}:`, updateResult?.message || 'Unknown error');
+              }
+            } catch (pointError) {
+              console.error(`❌ Lỗi khi cộng điểm cho user ${userId}:`, pointError.message || pointError);
             }
+          } else {
+            console.warn(`⚠️ User ${userId} không có center_id, không thể cộng điểm. CenterMember:`, centerMember?.length || 0);
+          }
+        } 
+        // 🔴 Kéo task ra khỏi cột Done → trừ điểm
+        // Chỉ trừ điểm nếu task đã có done_at (đã từng done) và bị kéo ra khỏi done
+        else if (!newisDone && hadDoneAtBefore && userId) {
+          // Lấy center_id từ CenterMember hoặc từ User model
+          let centerId = null;
+          
+          // Thử lấy từ CenterMember trước
+          const centerMember = await CenterMemberRepo.findByUserId(userId);
+          if (centerMember && centerMember.length > 0) {
+            // Lấy center_id từ centerMember (có thể là object đã populate hoặc ObjectId)
+            const cm = centerMember[0];
+            centerId = cm.center_id?._id || cm.center_id;
+          }
+          
+          // Nếu không có centerMember, lấy từ User model
+          if (!centerId) {
+            const assignedUser = await userService.getUserById(userId);
+            if (assignedUser) {
+              centerId = assignedUser.center_id?._id || assignedUser.center_id;
+            }
+          }
+
+          // Nếu có centerId, trừ điểm
+          if (centerId) {
+            try {
+              await userPointRepo.updatePoint(userId, centerId, -pointsDeduction);
+            } catch (pointError) {
+              console.error(`❌ Lỗi khi trừ điểm cho user ${userId}:`, pointError);
+            }
+          } else {
+            console.warn(`⚠️ User ${userId} không có center_id, không thể trừ điểm`);
           }
         }
       }
