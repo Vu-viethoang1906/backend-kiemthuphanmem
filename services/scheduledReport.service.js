@@ -71,13 +71,9 @@ class ScheduledReportService {
       throw new Error('Phải có ít nhất một địa chỉ email người nhận');
     }
 
-    // Validate email format - regex chuẩn, dùng được 99% case thực tế (hỗ trợ email công ty như @codegym.vn)
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    for (const email of recipients) {
-      if (!emailRegex.test(email)) {
-        throw new Error(`Địa chỉ email không hợp lệ: ${email}`);
-      }
-    }
+    // Validate email format - chỉ chấp nhận @gmail.com và @st.cmcu.edu.vn
+    const { validateEmailsOrThrow } = require('../utils/emailValidator');
+    validateEmailsOrThrow(recipients, 'Email');
 
     // Calculate next send time
     const next_send_at = this.calculateNextSendTime(frequency);
@@ -116,13 +112,9 @@ class ScheduledReportService {
         throw new Error('Phải có ít nhất một địa chỉ email người nhận');
       }
 
-      // Validate email format - regex chuẩn, dùng được 99% case thực tế (hỗ trợ email công ty như @codegym.vn)
-      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-      for (const email of recipients) {
-        if (!emailRegex.test(email)) {
-          throw new Error(`Địa chỉ email không hợp lệ: ${email}`);
-        }
-      }
+      // Validate email format - chỉ chấp nhận @gmail.com và @st.cmcu.edu.vn
+      const { validateEmailsOrThrow } = require('../utils/emailValidator');
+      validateEmailsOrThrow(recipients, 'Email');
       updateData.recipients = recipients;
     }
 

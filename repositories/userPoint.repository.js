@@ -58,7 +58,6 @@ async updatePoint(userId, centerId, addPoint) {
         data: userPoint
       };
     } catch (error) {
-      console.error('❌ Lỗi khi cập nhật điểm:', error);
       return { success: false, message: error.message };
     }
   }

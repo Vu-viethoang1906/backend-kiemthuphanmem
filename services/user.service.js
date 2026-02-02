@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const keycloack = require('../services/keycloak.service');
 const userRole = require('../repositories/userRole.repository');
 const { restoreUserOnKeycloak } = require('../services/keycloak.service');
+const { validateEmailOrThrow } = require('../utils/emailValidator');
 /**
  * User Service - Xử lý business logic cho User
  * Chứa các methods xử lý logic nghiệp vụ liên quan đến user
@@ -17,6 +18,10 @@ class UserService {
       let user = await userRepo.findByEmail(login);
       if (!user) {
         user = await userRepo.findByUsername(login);
+      }
+      // Hỗ trợ đăng nhập bằng CodeGym ID
+      if (!user) {
+        user = await userRepo.findByCodegymId(login);
       }
 
       if (!user) {
@@ -109,11 +114,8 @@ class UserService {
         throw new Error('Email là bắt buộc');
       }
 
-      // Validate email format - regex chuẩn, dùng được 99% case thực tế (hỗ trợ email công ty như @codegym.vn)
-      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-      if (!emailRegex.test(userData.email)) {
-        throw new Error('Email không đúng định dạng');
-      }
+      // Validate email format - chỉ chấp nhận @gmail.com và @st.cmcu.edu.vn
+      validateEmailOrThrow(userData.email, 'Email');
 
       // Kiểm tra email đã tồn tại chưa
       const emailExists = await userRepo.isEmailExists(userData.email);
@@ -166,6 +168,17 @@ class UserService {
 
   async createUserSSO(userData) {
     try {
+      // Validate email nếu có
+      if (userData.email) {
+        validateEmailOrThrow(userData.email, 'Email');
+        
+        // Kiểm tra email đã tồn tại chưa
+        const emailExists = await userRepo.isEmailExists(userData.email);
+        if (emailExists) {
+          throw new Error('Email đã tồn tại trong hệ thống');
+        }
+      }
+      
       userData.typeAccount = 'SSO';
       return await userRepo.create(userData);
     } catch (error) {
@@ -193,10 +206,9 @@ class UserService {
       if (!updateData || Object.keys(updateData).length === 0)
         throw new Error('Dữ liệu cập nhật không được để trống');
 
-      // ✅ Validate email - regex chuẩn, dùng được 99% case thực tế (hỗ trợ email công ty như @codegym.vn)
+      // ✅ Validate email - chỉ chấp nhận @gmail.com và @st.cmcu.edu.vn
       if (updateData.email) {
-        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-        if (!emailRegex.test(updateData.email)) throw new Error('Email không đúng định dạng');
+        validateEmailOrThrow(updateData.email, 'Email');
 
         const emailExists = await userRepo.isEmailExists(updateData.email, id);
         if (emailExists) throw new Error('Email đã tồn tại trong hệ thống');
@@ -276,6 +288,17 @@ class UserService {
 
   async updateProfile(userId, updateData) {
     try {
+      // Validate email nếu có cập nhật email
+      if (updateData.email) {
+        validateEmailOrThrow(updateData.email, 'Email');
+        
+        // Kiểm tra email đã tồn tại chưa (trừ user hiện tại)
+        const emailExists = await userRepo.isEmailExists(updateData.email, userId);
+        if (emailExists) {
+          throw new Error('Email đã tồn tại trong hệ thống');
+        }
+      }
+
       const user = await userRepo.update(userId, updateData);
 
       return user;
