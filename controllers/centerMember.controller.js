@@ -34,21 +34,22 @@ class CenterMemberController {
   async removeMember(req, res) {
     try {
       const { id } = req.params;
-      await centerMemberService.removeMember(id);
-      res.json({ success: true, message: "Xóa thành viên thành công" });
+      const requester_id = req.user?.id || req.user?._id;
+      if (!requester_id) {
+        return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+      }
+      await centerMemberService.removeMember(id, requester_id);
+      res.json({ success: true, message: 'Xóa thành viên khỏi center thành công' });
     } catch (error) {
       res.status(400).json({ success: false, message: error.message });
     }
   }
-    async getAll(req, res) {
+  async getAll(req, res) {
     try {
-     const data =  await centerMemberService.getAll();
-         res.json({ success: true, data });
-    } catch (error) {
-      
-    }
-    }
-
+      const data = await centerMemberService.getAll();
+      res.json({ success: true, data });
+    } catch (error) {}
+  }
 }
 
 module.exports = new CenterMemberController();
