@@ -1,6 +1,7 @@
 const centerMemberRepo = require('../repositories/centerMember.repo');
 const userRepo = require('../repositories/user.repository');
 const centerRepo = require('../repositories/center.repository');
+const userPointRepo = require('../repositories/userPoint.repository');
 const { sendNotification } = require('../config/socket');
 const notificationService = require('./notification.service');
 const UserRole = require('../models/userRole.model');
@@ -23,6 +24,11 @@ class CenterMemberService {
       user_id,
       role_in_center,
     });
+
+    // Đồng bộ UserPoint: user đổi center thì bản ghi điểm cũng chuyển theo center mới, tránh phân tán
+    try {
+      await userPointRepo.updateCenterForUser(user_id, center_id);
+    } catch (err) {}
 
     sendNotification(
       'private_Notification',

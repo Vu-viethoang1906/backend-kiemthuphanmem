@@ -703,7 +703,10 @@ class TaskService {
         throw new Error('Column không thuộc board này');
 
       const newColumnName = newColumn.name || 'Không có tên cột';
-      const newisDone = newColumn.isDone || false;
+      const newisDone =
+        newColumn.isDone === true ||
+        newColumn.isDoneColumn === true ||
+        (doneColumnId && new_column_id.toString() === doneColumnId.toString());
 
       // ====== Lấy thông tin swimlane cũ và mới ======
       let oldSwimlaneName = 'Không có';
@@ -777,9 +780,7 @@ class TaskService {
               boardId.toString()
             );
           }
-        } catch (slackError) {
-          console.error('[Slack] Error sending task completed notification:', slackError && (slackError.stack || slackError.message || slackError));
-        }
+        } catch (slackError) {}
       }
       // Nếu task bị kéo ra khỏi cột Done → bỏ done_at
       else if (task.column_id.toString() === doneColumnId?.toString()) {
@@ -815,9 +816,7 @@ class TaskService {
             newColumnName,
             boardId.toString()
           );
-        } catch (slackError) {
-          console.error('[Slack] Error sending task moved notification:', slackError && (slackError.stack || slackError.message || slackError));
-        }
+        } catch (slackError) {}
       }
 
       const movedTask = await taskRepo.update(task_id, updateData);
@@ -846,7 +845,10 @@ class TaskService {
 
         // Lấy thông tin task sau khi cập nhật
         const taskData = await taskRepo.findById(task_id);
-        const userId = taskData?.assigned_to?._id || taskData?.assigned_to;
+        const assignedTo = taskData?.assigned_to?._id || taskData?.assigned_to;
+        const userId =
+          assignedTo &&
+          (assignedTo._id || assignedTo.toString ? assignedTo.toString() : assignedTo);
 
         // Kiểm tra task có done_at trước đó không (để biết task đã từng done chưa)
         const hadDoneAtBefore = task.done_at !== null && task.done_at !== undefined;
@@ -858,36 +860,28 @@ class TaskService {
         if (newisDone && !hadDoneAtBefore && userId) {
           // Lấy center_id từ CenterMember hoặc từ User model
           let centerId = null;
-          
+
           // Thử lấy từ CenterMember trước
           const centerMember = await CenterMemberRepo.findByUserId(userId);
           if (centerMember && centerMember.length > 0) {
-            // Lấy center_id từ centerMember (có thể là object đã populate hoặc ObjectId)
             const cm = centerMember[0];
-            centerId = cm.center_id?._id || cm.center_id;
-            console.log(`✅ Tìm thấy center_id từ CenterMember cho user ${userId}:`, centerId);
+            const rawCenterId = cm.center_id?._id || cm.center_id;
+            centerId = rawCenterId && (rawCenterId.toString ? rawCenterId.toString() : rawCenterId);
           }
-          
-          // Nếu không có centerMember, lấy từ User model
+
           if (!centerId) {
             const assignedUser = await userService.getUserById(userId);
             if (assignedUser) {
-              centerId = assignedUser.center_id?._id || assignedUser.center_id;
-              console.log(`✅ Tìm thấy center_id từ User model cho user ${userId}:`, centerId);
+              const raw = assignedUser.center_id?._id || assignedUser.center_id;
+              centerId = raw && (raw.toString ? raw.toString() : raw);
             }
           }
 
-          // Nếu vẫn có centerId, cộng điểm
           if (centerId) {
             try {
-              console.log(`🔄 Đang cộng ${pointsPerTask} điểm cho user ${userId} tại center ${centerId}`);
-              // Cộng điểm cho user (sẽ tự động tạo UserPoint nếu chưa có)
               const updateResult = await userPointRepo.updatePoint(userId, centerId, pointsPerTask);
-              
-              // updatePoint luôn trả về object với success
+
               if (updateResult && updateResult.success === true) {
-                console.log(`✅ Đã cộng điểm thành công cho user ${userId}, center ${centerId}`);
-                // Lấy thông tin userPoint sau khi cập nhật
                 const userPoint = await userPointRepo.findByUserAndCenter(userId, centerId);
                 const totalPoints = userPoint?.total_points || 0;
 
@@ -930,51 +924,31 @@ class TaskService {
                       });
                     }
                   }
-                } catch (behaviorError) {
-                  // Log lỗi nhưng không block việc cộng điểm
-                  console.error('❌ Lỗi khi track behavior:', behaviorError);
-                }
-              } else {
-                console.error(`❌ Không thể cộng điểm cho user ${userId}:`, updateResult?.message || 'Unknown error');
+                } catch (behaviorError) {}
               }
-            } catch (pointError) {
-              console.error(`❌ Lỗi khi cộng điểm cho user ${userId}:`, pointError.message || pointError);
-            }
-          } else {
-            console.warn(`⚠️ User ${userId} không có center_id, không thể cộng điểm. CenterMember:`, centerMember?.length || 0);
+            } catch (pointError) {}
           }
-        } 
+        }
         // 🔴 Kéo task ra khỏi cột Done → trừ điểm
-        // Chỉ trừ điểm nếu task đã có done_at (đã từng done) và bị kéo ra khỏi done
         else if (!newisDone && hadDoneAtBefore && userId) {
-          // Lấy center_id từ CenterMember hoặc từ User model
           let centerId = null;
-          
-          // Thử lấy từ CenterMember trước
-          const centerMember = await CenterMemberRepo.findByUserId(userId);
-          if (centerMember && centerMember.length > 0) {
-            // Lấy center_id từ centerMember (có thể là object đã populate hoặc ObjectId)
-            const cm = centerMember[0];
-            centerId = cm.center_id?._id || cm.center_id;
+          const centerMemberList = await CenterMemberRepo.findByUserId(userId);
+          if (centerMemberList && centerMemberList.length > 0) {
+            const cm = centerMemberList[0];
+            const raw = cm.center_id?._id || cm.center_id;
+            centerId = raw && (raw.toString ? raw.toString() : raw);
           }
-          
-          // Nếu không có centerMember, lấy từ User model
           if (!centerId) {
             const assignedUser = await userService.getUserById(userId);
             if (assignedUser) {
-              centerId = assignedUser.center_id?._id || assignedUser.center_id;
+              const raw = assignedUser.center_id?._id || assignedUser.center_id;
+              centerId = raw && (raw.toString ? raw.toString() : raw);
             }
           }
-
-          // Nếu có centerId, trừ điểm
           if (centerId) {
             try {
               await userPointRepo.updatePoint(userId, centerId, -pointsDeduction);
-            } catch (pointError) {
-              console.error(`❌ Lỗi khi trừ điểm cho user ${userId}:`, pointError);
-            }
-          } else {
-            console.warn(`⚠️ User ${userId} không có center_id, không thể trừ điểm`);
+            } catch (pointError) {}
           }
         }
       }
