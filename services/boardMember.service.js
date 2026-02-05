@@ -30,7 +30,7 @@ class BoardMemberService {
 
         case 'remove_member':
           title = `Bạn đã bị xóa khỏi bảng "${board.title}"`;
-          body = `Bạn không còn là thành viên trong bảng này.`;
+          body = 'Bạn không còn là thành viên trong bảng này.';
           break;
 
         case 'update_role':
@@ -40,7 +40,7 @@ class BoardMemberService {
 
         default:
           title = `Hoạt động mới trong bảng "${board.title}"`;
-          body = `Có một thay đổi liên quan đến bạn trong bảng này.`;
+          body = 'Có một thay đổi liên quan đến bạn trong bảng này.';
           break;
       }
 
@@ -200,23 +200,22 @@ class BoardMemberService {
       throw new Error('Không thể xóa thành viên cuối cùng trong bảng');
     }
 
-    // Cho phép người dùng tự xóa chính mình
+    // Cho phép người dùng tự xóa chính mình (rời board)
     if (requester_id.toString() !== user_id) {
-      // Nếu người này muốn xóa người khác => phải là người tạo hoặc admin
+      // Xóa người khác: chỉ người tạo board hoặc admin hệ thống. Thành viên được thêm vào không có quyền xóa người khác.
       const isCreator = await boardRepo.isCreatorFromMember(requester_id, board_id);
       const requester = await userRepo.findById(requester_id);
-      if (!requester) throw new Error('Chỉ người tạo hoặc admin mới có quyền xóa thành viên khác');
+      if (!requester) throw new Error('Người thực hiện không tồn tại');
+
       const roles = await UserRoleRepo.findRoleByUser(requester_id);
-
-      const systemRoles = roles.map(r => r.name);
-
+      const systemRoles = (roles || []).map(r => r.name);
       const isSystemManagerOrAdmin =
         systemRoles.includes('System_Manager') || systemRoles.includes('admin');
 
       if (!isCreator && !isSystemManagerOrAdmin) {
-        if (!isCreator) {
-          throw new Error('Chỉ người tạo hoặc admin mới có quyền xóa thành viên khác');
-        }
+        throw new Error(
+          'Chỉ người tạo board mới có quyền xóa thành viên khỏi board. Thành viên được thêm vào không có quyền này.'
+        );
       }
     }
     // Không cho xóa người tạo cuối cùng
