@@ -93,3 +93,26 @@ exports.deleteCenter = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// Lấy các bảng của một thành viên trong center
+exports.getMemberBoards = async (req, res) => {
+  try {
+    console.log('[center.controller] getMemberBoards called, body:', req.body);
+    const { idUser, idCenter } = req.body || {};
+    if (!idUser) return res.status(400).json({ message: 'Missing idUser' });
+    if (!idCenter) return res.status(400).json({ message: 'Missing idCenter' });
+    
+    const boards = await centerService.viewMemberBoards(idUser, idCenter);
+    console.log('[center.controller] getMemberBoards result count:', Array.isArray(boards) ? boards.length : 0);
+    return res.json({
+      success: true,
+      data: boards
+    });
+  } catch (error) {
+    console.error('Error getting member boards:', error);
+    return res.status(400).json({ 
+      success: false,
+      message: `Error getting member boards: ${error.message}` 
+    });
+  }
+};

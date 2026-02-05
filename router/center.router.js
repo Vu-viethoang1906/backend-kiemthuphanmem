@@ -23,5 +23,6 @@ router.delete(
   authorizeAny("admin System_Manager"),
   centerController.deleteCenter
 );
+router.post("/getMemberBoards", authenticateAny, centerController.getMemberBoards);
 
 module.exports = router;

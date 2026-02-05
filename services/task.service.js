@@ -777,7 +777,9 @@ class TaskService {
               boardId.toString()
             );
           }
-        } catch (slackError) {}
+        } catch (slackError) {
+          console.error('[Slack] Error sending task completed notification:', slackError && (slackError.stack || slackError.message || slackError));
+        }
       }
       // Nếu task bị kéo ra khỏi cột Done → bỏ done_at
       else if (task.column_id.toString() === doneColumnId?.toString()) {
@@ -813,7 +815,9 @@ class TaskService {
             newColumnName,
             boardId.toString()
           );
-        } catch (slackError) {}
+        } catch (slackError) {
+          console.error('[Slack] Error sending task moved notification:', slackError && (slackError.stack || slackError.message || slackError));
+        }
       }
 
       const movedTask = await taskRepo.update(task_id, updateData);

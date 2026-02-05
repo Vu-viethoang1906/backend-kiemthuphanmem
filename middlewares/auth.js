@@ -35,6 +35,16 @@ const authenticateAny = async (req, res, next) => {
       const decodedLocal = jwt.verify(token, process.env.JWT_SECRET);
 
       user = await userService.getUserById(decodedLocal.userId);
+      
+      // ✅ Kiểm tra trạng thái tài khoản
+      if (!user.status || user.status.toLowerCase() !== "active") {
+        return res.status(403).json({
+          success: false,
+          message: "Tài khoản bị khóa hoặc chưa kích hoạt",
+          error: "Vui lòng liên hệ quản trị viên để được hỗ trợ",
+        });
+      }
+      
       const dbRoles = await userRoleService.getRoles(user._id);
       const roleNames =
         dbRoles?.map((r) => r.role_id?.name).filter(Boolean) || [];
@@ -90,6 +100,15 @@ const authenticateAny = async (req, res, next) => {
               role_id: roleId,
             });
         }
+      }
+
+      // ✅ Kiểm tra trạng thái tài khoản
+      if (!user.status || user.status.toLowerCase() !== "active") {
+        return res.status(403).json({
+          success: false,
+          message: "Tài khoản bị khóa hoặc chưa kích hoạt",
+          error: "Vui lòng liên hệ quản trị viên để được hỗ trợ",
+        });
       }
 
       const dbRoles = await userRoleService.getRoles(user._id);

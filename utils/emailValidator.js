@@ -1,4 +1,4 @@
-/**
+  /**
  * Email Validator Utility
  * Chỉ cho phép email có đuôi @gmail.com hoặc @st.cmcu.edu.vn
  */
