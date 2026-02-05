@@ -16,6 +16,7 @@ module.exports = {
   Tag: require('./tag.model'),
   TaskTag: require('./taskTag.model'),
   Comment: require('./comment.model'),
+  Checklist: require('./checklist.model'),
   ActivityLog: require('./activityLog.model'),
   Template: require('./template.model'),
   TemplateColumn: require('./templateColumn.model'),
