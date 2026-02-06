@@ -132,6 +132,7 @@ app.use('/api/swimlanes', swimlaneRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/checklists', checklistRoutes);
+app.use('/api/subtasks', require('./router/subtask.routes'));
 app.use('/api/comments', commentRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/taskTag', taskTag);
