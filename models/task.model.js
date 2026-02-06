@@ -60,6 +60,25 @@ const TaskSchema = new mongoose.Schema(
     // 🆕 THÊM MẢNG FILE ĐÍNH KÈM
     attachments: { type: [AttachmentSchema], default: [] },
 
+    // 🆕 BACKLOG & SPRINT FIELDS
+    sprint_id: {
+      type: mongoose.Types.ObjectId,
+      ref: "Sprint",
+      default: null,
+      index: true,
+    },
+    backlog_position: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+    story_points: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: null,
+    },
+
     position: {
       type: Number,
       default: 0,
@@ -90,23 +109,23 @@ TaskSchema.pre('save', function (next) {
   if (this.start_date && (isNaN(new Date(this.start_date).getTime()) || this.start_date === 'Invalid Date')) {
     this.start_date = undefined;
   }
-  
+
   // Validate due_date
   if (this.due_date && (isNaN(new Date(this.due_date).getTime()) || this.due_date === 'Invalid Date')) {
     this.due_date = undefined;
   }
-  
+
   next();
 });
 
 // Validate dates before updating
 TaskSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], function (next) {
   const update = this.getUpdate();
-  
+
   if (update && typeof update === 'object') {
     // Handle $set and direct updates
     const data = update.$set || update;
-    
+
     if (data.start_date) {
       const date = new Date(data.start_date);
       if (isNaN(date.getTime()) || data.start_date === 'Invalid Date') {
@@ -117,7 +136,7 @@ TaskSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], function (next) 
         }
       }
     }
-    
+
     if (data.due_date) {
       const date = new Date(data.due_date);
       if (isNaN(date.getTime()) || data.due_date === 'Invalid Date') {
@@ -129,7 +148,7 @@ TaskSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], function (next) 
       }
     }
   }
-  
+
   next();
 });
 

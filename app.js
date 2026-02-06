@@ -138,6 +138,8 @@ app.use('/api/import', importRoutes);
 app.use('/api/taskTag', taskTag);
 app.use('/api/permission', permissionRoutes);
 app.use('/api/RolePermission', RolePermissionRoutes);
+app.use('/api/backlog', require('./router/backlog.routes'));
+
 app.use('/api/CenterMember', CenterMember);
 
 app.use('/api/tasks', taskImportRoutes);
