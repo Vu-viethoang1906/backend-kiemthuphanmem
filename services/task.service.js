@@ -1193,6 +1193,56 @@ class TaskService {
 
     return { success: true, message: 'Xóa file đính kèm thành công' };
   }
+
+  // ⭐ Toggle star/favorite task
+  async toggleStar(taskId, userId) {
+    if (!mongoose.Types.ObjectId.isValid(taskId)) {
+      throw new Error('Task ID không hợp lệ');
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('User ID không hợp lệ');
+    }
+
+    const task = await taskRepo.findById(taskId);
+    if (!task) {
+      throw new Error('Task không tồn tại');
+    }
+
+    const userIdObj = new mongoose.Types.ObjectId(userId);
+    const starredBy = task.starred_by || [];
+    const isStarred = starredBy.some(id => id.toString() === userIdObj.toString());
+
+    let updatedTask;
+    if (isStarred) {
+      // Bỏ star: xóa userId khỏi mảng
+      updatedTask = await taskRepo.update(taskId, {
+        starred_by: starredBy.filter(id => id.toString() !== userIdObj.toString()),
+      });
+    } else {
+      // Thêm star: thêm userId vào mảng
+      updatedTask = await taskRepo.update(taskId, {
+        starred_by: [...starredBy, userIdObj],
+      });
+    }
+
+    return {
+      success: true,
+      is_starred: !isStarred,
+      message: !isStarred ? 'Đã đánh dấu task quan trọng' : 'Đã bỏ đánh dấu task',
+      data: updatedTask,
+    };
+  }
+
+  // ⭐ Lấy danh sách task đã được star bởi user
+  async getStarredTasks(userId) {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('User ID không hợp lệ');
+    }
+
+    const tasks = await taskRepo.findStarredByUser(userId);
+
+    return tasks;
+  }
 }
 
 module.exports = new TaskService();

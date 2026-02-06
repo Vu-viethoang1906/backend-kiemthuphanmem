@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
 const AttachmentSchema = new mongoose.Schema({
   original_name: String,
@@ -6,7 +6,7 @@ const AttachmentSchema = new mongoose.Schema({
   size: Number,
   mime_type: String,
   url: String,
-  uploaded_by: { type: mongoose.Types.ObjectId, ref: "User" },
+  uploaded_by: { type: mongoose.Types.ObjectId, ref: 'User' },
   uploaded_at: { type: Date, default: Date.now },
 });
 
@@ -14,17 +14,17 @@ const TaskSchema = new mongoose.Schema(
   {
     board_id: {
       type: mongoose.Types.ObjectId,
-      ref: "Board",
+      ref: 'Board',
       required: true,
     },
     column_id: {
       type: mongoose.Types.ObjectId,
-      ref: "Column",
+      ref: 'Column',
       required: true,
     },
     swimlane_id: {
       type: mongoose.Types.ObjectId,
-      ref: "Swimlane",
+      ref: 'Swimlane',
     },
     title: {
       type: String,
@@ -35,7 +35,7 @@ const TaskSchema = new mongoose.Schema(
     },
     priority: {
       type: String,
-      enum: ["High", "Medium", "Low"],
+      enum: ['High', 'Medium', 'Low'],
     },
     start_date: {
       type: Date,
@@ -48,12 +48,12 @@ const TaskSchema = new mongoose.Schema(
     },
     created_by: {
       type: mongoose.Types.ObjectId,
-      ref: "User",
+      ref: 'User',
       required: true,
     },
     assigned_to: {
       type: mongoose.Types.ObjectId,
-      ref: "User",
+      ref: 'User',
     },
     deleted_at: { type: Date, default: null },
 
@@ -63,7 +63,7 @@ const TaskSchema = new mongoose.Schema(
     // 🆕 BACKLOG & SPRINT FIELDS
     sprint_id: {
       type: mongoose.Types.ObjectId,
-      ref: "Sprint",
+      ref: 'Sprint',
       default: null,
       index: true,
     },
@@ -85,10 +85,13 @@ const TaskSchema = new mongoose.Schema(
     },
 
     done_at: { type: Date, default: null },
+
+    // ⭐ Star/Favorite: Danh sách user_id đã đánh dấu task này là quan trọng
+    starred_by: [{ type: mongoose.Types.ObjectId, ref: 'User' }],
   },
   {
-    collection: "Tasks",
-    timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
+    collection: 'Tasks',
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
   }
 );
 
@@ -97,7 +100,7 @@ TaskSchema.index({ deleted_at: 1 });
 
 TaskSchema.pre(/^find/, function (next) {
   const query = this.getQuery();
-  if (!query.hasOwnProperty("deleted_at") && !query.$or) {
+  if (!query.hasOwnProperty('deleted_at') && !query.$or) {
     this.where({ deleted_at: null });
   }
   next();
@@ -106,12 +109,18 @@ TaskSchema.pre(/^find/, function (next) {
 // Validate dates before saving
 TaskSchema.pre('save', function (next) {
   // Validate start_date
-  if (this.start_date && (isNaN(new Date(this.start_date).getTime()) || this.start_date === 'Invalid Date')) {
+  if (
+    this.start_date &&
+    (isNaN(new Date(this.start_date).getTime()) || this.start_date === 'Invalid Date')
+  ) {
     this.start_date = undefined;
   }
 
   // Validate due_date
-  if (this.due_date && (isNaN(new Date(this.due_date).getTime()) || this.due_date === 'Invalid Date')) {
+  if (
+    this.due_date &&
+    (isNaN(new Date(this.due_date).getTime()) || this.due_date === 'Invalid Date')
+  ) {
     this.due_date = undefined;
   }
 
@@ -152,4 +161,4 @@ TaskSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], function (next) 
   next();
 });
 
-module.exports = mongoose.model("Task", TaskSchema);
+module.exports = mongoose.model('Task', TaskSchema);

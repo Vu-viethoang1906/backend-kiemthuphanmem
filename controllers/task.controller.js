@@ -633,6 +633,43 @@ class TaskController {
       });
     }
   }
+
+  // ⭐ Toggle star/favorite task
+  async toggleStar(req, res) {
+    try {
+      const userId = req.user?.id;
+      const { id: taskId } = req.params;
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
+      }
+
+      if (!taskId) {
+        return res.status(400).json({ success: false, message: 'Task ID không hợp lệ' });
+      }
+
+      const result = await taskService.toggleStar(taskId, userId);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  // ⭐ Lấy danh sách task đã được star bởi user hiện tại
+  async getStarredTasks(req, res) {
+    try {
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Không có quyền truy cập' });
+      }
+
+      const tasks = await taskService.getStarredTasks(userId);
+      res.json({ success: true, data: tasks });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 }
 
 module.exports = new TaskController();

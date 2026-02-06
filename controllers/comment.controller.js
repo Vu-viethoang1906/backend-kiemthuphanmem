@@ -251,6 +251,32 @@ class CommentController {
       });
     }
   }
+
+  // 🆕 Lấy danh sách board members từ task_id để autocomplete @mentions
+  async getBoardMembersByTask(req, res) {
+    try {
+      const { taskId } = req.params;
+
+      if (!taskId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Task ID là bắt buộc',
+        });
+      }
+
+      const members = await commentService.getBoardMembersByTask(taskId);
+
+      res.json({
+        success: true,
+        data: members,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Không thể lấy danh sách board members',
+      });
+    }
+  }
 }
 
 module.exports = new CommentController();

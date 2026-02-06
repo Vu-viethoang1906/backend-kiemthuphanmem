@@ -4,10 +4,12 @@ const mongoose = require('mongoose');
 const userRepo = require('../repositories/user.repository');
 const { sendMailToUser } = require('../config/sendNotify');
 const boardRepo = require('../repositories/board.repository');
+const boardMemberRepo = require('../repositories/boardMember.repository');
 const notificationService = require('../services/notification.service');
 const { sendNotification } = require('../config/socket');
 const TaskService = require('./task.service');
 const Comment = require('../models/comment.model');
+const { parseMentions, resolveMentionsToUserIds } = require('../utils/mentionParser');
 class CommentService {
   // Tạo comment mới
   async createComment({ task_id, user_id, content, user_tag_id, collaborations }) {
@@ -54,14 +56,39 @@ class CommentService {
         }
       }
 
-      // Tạo comment
+      // 🆕 Parse @mentions từ content
+      const mentions = parseMentions(content);
+      let mentionedUserIds = [];
 
+      if (mentions.length > 0) {
+        // Lấy board members để resolve mentions
+        const taskComment = await taskRepo.findById(task_id);
+        if (taskComment && taskComment.board_id) {
+          const boardId = taskComment.board_id.toString();
+          const boardMembers = await boardMemberRepo.getMembersByBoard(boardId);
+
+          // Populate user_id để lấy thông tin user
+          const User = require('../models/usersModel');
+          const memberUserIds = boardMembers.map(m => m.user_id?._id || m.user_id).filter(Boolean);
+          const memberUsers = await User.find({ _id: { $in: memberUserIds } })
+            .select('username full_name _id')
+            .lean();
+
+          mentionedUserIds = resolveMentionsToUserIds(mentions, memberUsers);
+        }
+      }
+
+      // Tạo comment
       const commentData = {
         task_id,
         user_id,
         content: content.trim(),
         user_tag_id: user_tag_id || null,
         Collaboration: collaborations || null, // Sử dụng Collaboration (chữ hoa) để match với model
+        mentioned_users:
+          mentionedUserIds.length > 0
+            ? mentionedUserIds.map(id => new mongoose.Types.ObjectId(id))
+            : [],
       };
       const comment = await commentRepo.create(commentData);
       const UserComment = await userRepo.findById(user_id);
@@ -75,12 +102,67 @@ class CommentService {
         const board = await boardRepo.findById(idBoard);
         const idUser = taskComment.assigned_to?._id;
 
+        // 🆕 Gửi notification cho users được @mention
+        if (mentionedUserIds.length > 0) {
+          for (const mentionedUserId of mentionedUserIds) {
+            // Không gửi notification cho chính người comment
+            if (mentionedUserId === user_id.toString()) {
+              continue;
+            }
+
+            try {
+              const mentionedUser = await userRepo.findById(mentionedUserId);
+              if (!mentionedUser) continue;
+
+              // 1️⃣ Gửi email
+              const subject = 'Bạn được mention trong bình luận';
+              const html = `
+                <h3>Xin chào ${mentionedUser.full_name || mentionedUser.username}!</h3>
+                <p><b>${full_name}</b> đã mention bạn trong bình luận của task <b>${taskComment.title}</b> thuộc board <b>${board.title}</b>.</p>
+                <p><b>Nội dung:</b> ${content.trim()}</p>
+                <p>Cảm ơn bạn đã đọc.</p>
+                <p>— CodeGym Team</p>
+              `;
+              await sendMailToUser(mentionedUserId, subject, html);
+
+              // 2️⃣ Tạo notification trong database
+              const notificationMessage = `${full_name} đã mention bạn trong bình luận của task "${taskComment.title}"`;
+              await notificationService.createNotification({
+                user_id: mentionedUserId,
+                title: 'Bạn được mention',
+                body: notificationMessage,
+                type: 'comment_mention',
+                board_id: idBoard,
+                task_id: task_id,
+              });
+
+              // 3️⃣ Gửi real-time qua Socket
+              sendNotification(
+                'comment_mention',
+                {
+                  message: notificationMessage,
+                  comment_id: comment._id,
+                  task_id: task_id,
+                  task_title: taskComment.title,
+                  board_id: idBoard,
+                  board_name: board.title,
+                  mentioned_by: full_name,
+                  mentioned_by_id: user_id.toString(),
+                  content: content.trim(),
+                  timestamp: new Date().toISOString(),
+                },
+                mentionedUserId
+              );
+            } catch (mentionError) {}
+          }
+        }
+
         if (idUser) {
           const idString = idUser.toString() || '';
           const asignTo = await userRepo.findById(idUser);
 
-          // Chỉ gửi nếu người comment không phải là người được assign
-          if (asignTo && idString !== user_id.toString()) {
+          // Chỉ gửi nếu người comment không phải là người được assign và không được mention
+          if (asignTo && idString !== user_id.toString() && !mentionedUserIds.includes(idString)) {
             // 1️⃣ Gửi email
             const subject = 'Bạn vừa được bình luận';
             const html = `
@@ -241,9 +323,7 @@ class CommentService {
             );
           }
         }
-      } catch (notifError) {
-        console.error('❌ Lỗi khi gửi notification:', notifError);
-      }
+      } catch (notifError) {}
 
       return updatedComment;
     } catch (error) {
@@ -317,9 +397,7 @@ class CommentService {
             );
           }
         }
-      } catch (notifError) {
-        console.error('❌ Lỗi khi gửi notification:', notifError);
-      }
+      } catch (notifError) {}
 
       // Soft delete comment
       const deleted = await commentRepo.softDelete(id);
@@ -408,9 +486,7 @@ class CommentService {
       if (fs.existsSync(filePath)) {
         try {
           fs.unlinkSync(filePath);
-        } catch (err) {
-          console.error('Lỗi khi xóa file:', err);
-        }
+        } catch (err) {}
       }
     }
 
@@ -515,14 +591,18 @@ class CommentService {
     // 6. Calculate per-user collaboration metrics
     const userMetrics = {};
     const userIds = new Set();
-    
+
     // Collect all user IDs
     comments.forEach(c => {
       if (c.user_id?._id) userIds.add(c.user_id._id.toString());
       if (c.user_tag_id?._id) userIds.add(c.user_tag_id._id.toString());
     });
     tasks.forEach(t => {
-      const assignees = Array.isArray(t.assigned_to) ? t.assigned_to : t.assigned_to ? [t.assigned_to] : [];
+      const assignees = Array.isArray(t.assigned_to)
+        ? t.assigned_to
+        : t.assigned_to
+          ? [t.assigned_to]
+          : [];
       assignees.forEach(a => {
         if (a?._id) userIds.add(a._id.toString());
       });
@@ -547,7 +627,7 @@ class CommentService {
       const userId = c.user_id?._id?.toString();
       if (userId && userMetrics[userId]) {
         userMetrics[userId].commentCount++;
-        
+
         // Count mentions given
         if (c.user_tag_id) {
           userMetrics[userId].mentionsGiven++;
@@ -561,12 +641,12 @@ class CommentService {
 
     // Count multi-collaborator tasks per user
     tasks.forEach(task => {
-      const assignees = Array.isArray(task.assigned_to) 
-        ? task.assigned_to 
-        : task.assigned_to 
-          ? [task.assigned_to] 
+      const assignees = Array.isArray(task.assigned_to)
+        ? task.assigned_to
+        : task.assigned_to
+          ? [task.assigned_to]
           : [];
-      
+
       if (assignees.length > 1) {
         assignees.forEach(a => {
           const userId = a?._id?.toString();
@@ -583,13 +663,16 @@ class CommentService {
       for (let i = 1; i < list.length; i++) {
         const currentComment = list[i];
         const previousComment = list[i - 1];
-        
+
         const currentUserId = currentComment.user_id?._id?.toString();
         const previousUserId = previousComment.user_id?._id?.toString();
-        
+
         if (currentUserId && previousUserId && currentUserId !== previousUserId) {
-          const diffMinutes = (new Date(currentComment.created_at) - new Date(previousComment.created_at)) / 1000 / 60;
-          
+          const diffMinutes =
+            (new Date(currentComment.created_at) - new Date(previousComment.created_at)) /
+            1000 /
+            60;
+
           if (userMetrics[currentUserId]) {
             userMetrics[currentUserId].totalResponseTime += diffMinutes;
             userMetrics[currentUserId].responseCount++;
@@ -599,26 +682,33 @@ class CommentService {
     }
 
     // Calculate collaboration score and avg response time
-    const collaborationMetrics = Object.values(userMetrics).map(metrics => {
-      const avgResponseTime = metrics.responseCount > 0 
-        ? Math.round((metrics.totalResponseTime / metrics.responseCount) * 10) / 10 
-        : 0;
-      
-      // Collaboration score = weighted sum of metrics
-      // Comment count: 30%, Mentions: 25%, Multi-collaborator: 25%, Response time: 20%
-      const commentScore = Math.min(metrics.commentCount / 10, 1) * 30;
-      const mentionScore = Math.min((metrics.mentionsGiven + metrics.mentionsReceived) / 5, 1) * 25;
-      const multiCollabScore = Math.min(metrics.multiCollaboratorTasks / 5, 1) * 25;
-      const responseScore = avgResponseTime > 0 && avgResponseTime < 60 ? (60 - avgResponseTime) / 60 * 20 : 0;
-      
-      const collaborationScore = Math.round(commentScore + mentionScore + multiCollabScore + responseScore);
-      
-      return {
-        ...metrics,
-        avgResponseTimeMinutes: avgResponseTime,
-        collaborationScore: Math.min(collaborationScore, 100),
-      };
-    }).sort((a, b) => b.collaborationScore - a.collaborationScore);
+    const collaborationMetrics = Object.values(userMetrics)
+      .map(metrics => {
+        const avgResponseTime =
+          metrics.responseCount > 0
+            ? Math.round((metrics.totalResponseTime / metrics.responseCount) * 10) / 10
+            : 0;
+
+        // Collaboration score = weighted sum of metrics
+        // Comment count: 30%, Mentions: 25%, Multi-collaborator: 25%, Response time: 20%
+        const commentScore = Math.min(metrics.commentCount / 10, 1) * 30;
+        const mentionScore =
+          Math.min((metrics.mentionsGiven + metrics.mentionsReceived) / 5, 1) * 25;
+        const multiCollabScore = Math.min(metrics.multiCollaboratorTasks / 5, 1) * 25;
+        const responseScore =
+          avgResponseTime > 0 && avgResponseTime < 60 ? ((60 - avgResponseTime) / 60) * 20 : 0;
+
+        const collaborationScore = Math.round(
+          commentScore + mentionScore + multiCollabScore + responseScore
+        );
+
+        return {
+          ...metrics,
+          avgResponseTimeMinutes: avgResponseTime,
+          collaborationScore: Math.min(collaborationScore, 100),
+        };
+      })
+      .sort((a, b) => b.collaborationScore - a.collaborationScore);
 
     // 7. Convert graph to edges list for frontend
     const edges = [];
@@ -637,8 +727,10 @@ class CommentService {
     // 8. Get user info for nodes
     const User = require('../models/usersModel');
     const nodeUsers = await User.find({
-      _id: { $in: Array.from(userIds).map(id => new mongoose.Types.ObjectId(id)) }
-    }).select('username full_name email').lean();
+      _id: { $in: Array.from(userIds).map(id => new mongoose.Types.ObjectId(id)) },
+    })
+      .select('username full_name email')
+      .lean();
 
     const nodeMap = {};
     nodeUsers.forEach(u => {
@@ -654,7 +746,7 @@ class CommentService {
     const nodes = Array.from(userIds).map(uid => {
       const metrics = userMetrics[uid] || {};
       const userInfo = nodeMap[uid] || {};
-      
+
       return {
         id: uid,
         ...userInfo,
@@ -664,37 +756,52 @@ class CommentService {
     });
 
     // 10. Group analysis (identify groups with good/poor collaboration)
-    const avgCollaborationScore = collaborationMetrics.length > 0
-      ? collaborationMetrics.reduce((sum, m) => sum + m.collaborationScore, 0) / collaborationMetrics.length
-      : 0;
+    const avgCollaborationScore =
+      collaborationMetrics.length > 0
+        ? collaborationMetrics.reduce((sum, m) => sum + m.collaborationScore, 0) /
+          collaborationMetrics.length
+        : 0;
 
-    const goodCollaborators = collaborationMetrics.filter(m => m.collaborationScore >= avgCollaborationScore);
-    const poorCollaborators = collaborationMetrics.filter(m => m.collaborationScore < avgCollaborationScore * 0.5);
+    const goodCollaborators = collaborationMetrics.filter(
+      m => m.collaborationScore >= avgCollaborationScore
+    );
+    const poorCollaborators = collaborationMetrics.filter(
+      m => m.collaborationScore < avgCollaborationScore * 0.5
+    );
 
     return {
       // Network graph data
       nodes,
       edges,
       graph,
-      
+
       // Per-user collaboration metrics
       collaborationMetrics,
-      
+
       // Summary statistics
       summary: {
         totalUsers: collaborationMetrics.length,
         totalComments: comments.length,
         totalMentions: comments.filter(c => c.user_tag_id).length,
         totalMultiCollaboratorTasks: tasks.filter(t => {
-          const assignees = Array.isArray(t.assigned_to) ? t.assigned_to : t.assigned_to ? [t.assigned_to] : [];
+          const assignees = Array.isArray(t.assigned_to)
+            ? t.assigned_to
+            : t.assigned_to
+              ? [t.assigned_to]
+              : [];
           return assignees.length > 1;
         }).length,
         averageCollaborationScore: Math.round(avgCollaborationScore * 10) / 10,
-        averageResponseTimeMinutes: collaborationMetrics.length > 0
-          ? Math.round((collaborationMetrics.reduce((sum, m) => sum + m.avgResponseTimeMinutes, 0) / collaborationMetrics.length) * 10) / 10
-          : 0,
+        averageResponseTimeMinutes:
+          collaborationMetrics.length > 0
+            ? Math.round(
+                (collaborationMetrics.reduce((sum, m) => sum + m.avgResponseTimeMinutes, 0) /
+                  collaborationMetrics.length) *
+                  10
+              ) / 10
+            : 0,
       },
-      
+
       // Group analysis
       groupAnalysis: {
         goodCollaborators: {
@@ -719,6 +826,83 @@ class CommentService {
         },
       },
     };
+  }
+
+  // 🆕 Lấy danh sách board members từ task_id để autocomplete @mentions
+  async getBoardMembersByTask(taskId) {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(taskId)) {
+        throw new Error('Task ID không hợp lệ');
+      }
+
+      // Lấy task để biết board_id
+      const task = await taskRepo.findById(taskId);
+      if (!task) {
+        throw new Error('Task không tồn tại');
+      }
+
+      const boardId = task.board_id?._id?.toString() || task.board_id?.toString() || task.board_id;
+      if (!boardId) {
+        throw new Error('Task không có board_id');
+      }
+
+      // Lấy board members
+      const boardMembers = await boardMemberRepo.getMembersByBoard(boardId);
+
+      if (!boardMembers || boardMembers.length === 0) {
+        return [];
+      }
+
+      // Populate user_id để lấy thông tin đầy đủ
+      const User = require('../models/usersModel');
+      const memberUserIds = [];
+
+      // Extract user IDs từ board members (handle cả populated và non-populated)
+      for (const member of boardMembers) {
+        if (!member.user_id) continue;
+
+        let userId = null;
+        // Nếu đã được populate (là object)
+        if (typeof member.user_id === 'object' && member.user_id._id) {
+          userId = member.user_id._id.toString();
+        }
+        // Nếu là ObjectId trực tiếp
+        else if (member.user_id.toString) {
+          userId = member.user_id.toString();
+        }
+        // Nếu là string
+        else if (typeof member.user_id === 'string') {
+          userId = member.user_id;
+        }
+
+        if (userId && !memberUserIds.includes(userId)) {
+          memberUserIds.push(userId);
+        }
+      }
+
+      if (memberUserIds.length === 0) {
+        return [];
+      }
+
+      const users = await User.find({
+        _id: { $in: memberUserIds.map(id => new mongoose.Types.ObjectId(id)) },
+      })
+        .select('username full_name email avatar_url _id')
+        .lean();
+
+      // Format response
+      return users.map(user => ({
+        _id: user._id,
+        username: user.username || '',
+        full_name: user.full_name || '',
+        email: user.email || '',
+        avatar_url: user.avatar_url || '',
+        // Display name cho autocomplete (ưu tiên full_name, fallback về username)
+        displayName: user.full_name || user.username || 'Unknown User',
+      }));
+    } catch (error) {
+      throw error;
+    }
   }
 }
 

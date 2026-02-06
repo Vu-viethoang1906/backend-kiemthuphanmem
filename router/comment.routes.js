@@ -17,6 +17,9 @@ router.post('/', authenticateAny, commentController.create);
 // Lấy comments của task - Story 23
 router.get('/task/:taskId', authenticateAny, commentController.getByTask);
 
+// 🆕 Lấy board members từ task_id để autocomplete @mentions
+router.get('/task/:taskId/members', authenticateAny, commentController.getBoardMembersByTask);
+
 // Lấy comment theo ID
 router.get('/:id', authenticateAny, commentController.getById);
 

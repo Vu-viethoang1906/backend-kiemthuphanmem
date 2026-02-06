@@ -1,5 +1,5 @@
-const Task = require("../models/task.model");
-const TaskTag = require("../models/taskTag.model");
+const Task = require('../models/task.model');
+const TaskTag = require('../models/taskTag.model');
 class TaskRepository {
   // Tạo task mới
   async create(taskData) {
@@ -10,17 +10,17 @@ class TaskRepository {
   // Lấy task theo ID
   async findById(id) {
     const task = await Task.findById(id)
-      .populate("column_id", "name order")
-      .populate("swimlane_id", "name order")
-      .populate("created_by", "username full_name")
-      .populate("assigned_to", "username full_name")
+      .populate('column_id', 'name order')
+      .populate('swimlane_id', 'name order')
+      .populate('created_by', 'username full_name')
+      .populate('assigned_to', 'username full_name')
       .lean();
 
     if (!task) return null;
 
     // ✅ Lấy luôn tag gắn với task này
     const taskTag = await TaskTag.findOne({ task_id: id })
-      .populate("tag_id", "name color") // chỉ lấy name & color của tag
+      .populate('tag_id', 'name color') // chỉ lấy name & color của tag
       .lean();
 
     if (taskTag && taskTag.tag_id) {
@@ -42,8 +42,8 @@ class TaskRepository {
       const {
         page = 1,
         limit = 50,
-        sortBy = "position",
-        sortOrder = "asc",
+        sortBy = 'position',
+        sortOrder = 'asc',
         filter = {},
         search = null,
         dateRange = {},
@@ -76,8 +76,8 @@ class TaskRepository {
       // Apply search
       if (search) {
         query.$or = [
-          { title: { $regex: search, $options: "i" } },
-          { description: { $regex: search, $options: "i" } },
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
         ];
       }
 
@@ -86,31 +86,31 @@ class TaskRepository {
 
       // Build sort object
       const sort = {};
-      sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+      sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
       // Get tasks with pagination
       const tasks = await Task.find(query)
-        .populate("column_id", "name order")
-        .populate("swimlane_id", "name order")
-        .populate("created_by", "username full_name")
-        .populate("assigned_to", "username full_name avatar_url")
+        .populate('column_id', 'name order')
+        .populate('swimlane_id', 'name order')
+        .populate('created_by', 'username full_name')
+        .populate('assigned_to', 'username full_name avatar_url')
         .sort(sort)
         .skip(skip)
         .limit(limit)
         .lean();
 
       // Lấy task IDs
-      const taskIds = tasks.map((t) => t._id);
+      const taskIds = tasks.map(t => t._id);
 
       if (taskIds.length > 0) {
         // Lấy TaskTags
         const taskTags = await TaskTag.find({ task_id: { $in: taskIds } })
-          .populate("tag_id", "name color")
+          .populate('tag_id', 'name color')
           .lean();
 
         // Map tags to tasks
         const taskTagMap = {};
-        taskTags.forEach((tt) => {
+        taskTags.forEach(tt => {
           taskTagMap[tt.task_id.toString()] = tt.tag_id
             ? {
                 _id: tt.tag_id._id,
@@ -120,7 +120,7 @@ class TaskRepository {
             : null;
         });
 
-        tasks.forEach((task) => {
+        tasks.forEach(task => {
           task.tag = taskTagMap[task._id.toString()] || null;
         });
       }
@@ -142,9 +142,9 @@ class TaskRepository {
   // Lấy tasks theo column
   async findByColumn(column_id) {
     const tasks = await Task.find({ column_id, deleted_at: null })
-      .populate("swimlane_id", "name")
-      .populate("created_by", "username full_name")
-      .populate("assigned_to", "username full_name")
+      .populate('swimlane_id', 'name')
+      .populate('created_by', 'username full_name')
+      .populate('assigned_to', 'username full_name')
       .lean();
 
     tasks.sort((a, b) => a.position - b.position); // sắp xếp theo position tăng dần
@@ -154,9 +154,9 @@ class TaskRepository {
   // Lấy tasks theo swimlane
   async findBySwimlane(swimlane_id) {
     const tasks = await Task.find({ swimlane_id, deleted_at: null })
-      .populate("column_id", "name")
-      .populate("created_by", "username full_name")
-      .populate("assigned_to", "username full_name")
+      .populate('column_id', 'name')
+      .populate('created_by', 'username full_name')
+      .populate('assigned_to', 'username full_name')
       .lean();
 
     tasks.sort((a, b) => a.position - b.position); // sắp xếp theo position
@@ -167,9 +167,9 @@ class TaskRepository {
   // Lấy tasks được tạo bởi user
   async findByCreator(user_id) {
     const tasks = await Task.find({ created_by: user_id, deleted_at: null })
-      .populate("board_id", "title")
-      .populate("column_id", "name")
-      .populate("assigned_to", "username full_name")
+      .populate('board_id', 'title')
+      .populate('column_id', 'name')
+      .populate('assigned_to', 'username full_name')
       .lean();
 
     tasks.sort((a, b) => a.position - b.position); // sort position
@@ -179,9 +179,9 @@ class TaskRepository {
   // Lấy tasks được tạo bởi user
   async findByCreator(user_id) {
     return await Task.find({ created_by: user_id })
-      .populate("board_id", "title")
-      .populate("column_id", "name")
-      .populate("assigned_to", "username full_name")
+      .populate('board_id', 'title')
+      .populate('column_id', 'name')
+      .populate('assigned_to', 'username full_name')
       .sort({ created_at: -1 })
       .lean();
   }
@@ -189,8 +189,8 @@ class TaskRepository {
   // Cập nhật task
   async update(id, updateData) {
     const updated = await Task.findByIdAndUpdate(
-      id, 
-      { ...updateData, updated_at: Date.now() }, 
+      id,
+      { ...updateData, updated_at: Date.now() },
       { new: true }
     )
       .populate('column_id', 'name order isDone')
@@ -199,7 +199,7 @@ class TaskRepository {
       .populate('created_by', 'username full_name')
       .populate('assigned_to', 'username full_name avatar_url')
       .lean();
-    
+
     return updated;
   }
 
@@ -230,7 +230,7 @@ class TaskRepository {
       { $match: { board_id: board_id } },
       {
         $group: {
-          _id: "$column_id",
+          _id: '$column_id',
           count: { $sum: 1 },
         },
       },
@@ -244,12 +244,12 @@ class TaskRepository {
       board_id,
       deleted_at: null,
       $or: [
-        { title: { $regex: searchQuery, $options: "i" } },
-        { description: { $regex: searchQuery, $options: "i" } },
+        { title: { $regex: searchQuery, $options: 'i' } },
+        { description: { $regex: searchQuery, $options: 'i' } },
       ],
     })
-      .populate("column_id", "name")
-      .populate("assigned_to", "username full_name")
+      .populate('column_id', 'name')
+      .populate('assigned_to', 'username full_name')
       .lean();
 
     tasks.sort((a, b) => a.position - b.position); // sort position
@@ -265,11 +265,7 @@ class TaskRepository {
 
   async softDelete(id) {
     try {
-      return await Task.findByIdAndUpdate(
-        id,
-        { deleted_at: new Date() },
-        { new: true }
-      );
+      return await Task.findByIdAndUpdate(id, { deleted_at: new Date() }, { new: true });
     } catch (error) {
       throw error;
     }
@@ -277,15 +273,10 @@ class TaskRepository {
 
   async findAllWithDeleted(options = {}) {
     try {
-      const {
-        page = 1,
-        limit = 10,
-        sortBy = "created_at",
-        sortOrder = "desc",
-      } = options;
+      const { page = 1, limit = 10, sortBy = 'created_at', sortOrder = 'desc' } = options;
 
       const skip = (page - 1) * limit;
-      const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
+      const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
 
       const query = {
         $or: [{ deleted_at: null }, { deleted_at: { $ne: null } }],
@@ -362,9 +353,9 @@ class TaskRepository {
   // Lấy tất cả tasks được assign cho user
   async findByAssignedUser(user_id) {
     try {
-      const tasks = await Task.find({ 
-        assigned_to: user_id, 
-        deleted_at: null 
+      const tasks = await Task.find({
+        assigned_to: user_id,
+        deleted_at: null,
       })
         .populate('board_id', 'title')
         .populate('column_id', 'name order isDone')
@@ -373,11 +364,26 @@ class TaskRepository {
         .populate('assigned_to', 'username full_name avatar_url')
         .sort({ created_at: -1 })
         .lean();
-      
+
       return tasks;
     } catch (error) {
       throw error;
     }
+  }
+
+  // ⭐ Lấy tất cả tasks đã được star bởi user
+  async findStarredByUser(userId) {
+    return await Task.find({
+      starred_by: userId,
+      deleted_at: null,
+    })
+      .populate('column_id', 'name order isDone isDoneColumn')
+      .populate('swimlane_id', 'name order')
+      .populate('board_id', 'title')
+      .populate('created_by', 'username full_name')
+      .populate('assigned_to', 'username full_name avatar_url')
+      .sort({ updated_at: -1 })
+      .lean();
   }
 }
 

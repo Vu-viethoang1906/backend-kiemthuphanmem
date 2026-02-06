@@ -36,6 +36,9 @@ const CommentSchema = new mongoose.Schema(
       default: null,
     },
 
+    // 🆕 @Mention: Danh sách user_id được mention trong comment
+    mentioned_users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
     // 🆕 Thêm attachments
     attachments: { type: [AttachmentSchema], default: [] },
 
