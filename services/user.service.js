@@ -171,14 +171,14 @@ class UserService {
       // Validate email nếu có
       if (userData.email) {
         validateEmailOrThrow(userData.email, 'Email');
-        
+
         // Kiểm tra email đã tồn tại chưa
         const emailExists = await userRepo.isEmailExists(userData.email);
         if (emailExists) {
           throw new Error('Email đã tồn tại trong hệ thống');
         }
       }
-      
+
       userData.typeAccount = 'SSO';
       return await userRepo.create(userData);
     } catch (error) {
@@ -291,7 +291,7 @@ class UserService {
       // Validate email nếu có cập nhật email
       if (updateData.email) {
         validateEmailOrThrow(updateData.email, 'Email');
-        
+
         // Kiểm tra email đã tồn tại chưa (trừ user hiện tại)
         const emailExists = await userRepo.isEmailExists(updateData.email, userId);
         if (emailExists) {
@@ -392,7 +392,7 @@ class UserService {
     if (user.typeAccount === 'SSO' && user.idSSO) {
       try {
         await restoreUserOnKeycloak(user.idSSO);
-      } catch (kcError) {}
+      } catch (kcError) { }
     }
 
     return user;
