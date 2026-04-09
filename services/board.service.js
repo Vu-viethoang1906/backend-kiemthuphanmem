@@ -104,6 +104,36 @@ class BoardService {
         boards = boards.filter((b) => b.is_template === filter.is_template);
       }
 
+      // Apply sorting before pagination so first page is deterministic
+      const sortBy = paginationOptions.sortBy || "created_at";
+      const sortOrder = paginationOptions.sortOrder === "asc" ? 1 : -1;
+      boards = boards.sort((a, b) => {
+        const aValue = a?.[sortBy];
+        const bValue = b?.[sortBy];
+
+        // Keep stable behavior when a field is missing
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return 1;
+        if (bValue == null) return -1;
+
+        // Date fields
+        if (sortBy === "created_at" || sortBy === "updated_at") {
+          const aTime = new Date(aValue).getTime();
+          const bTime = new Date(bValue).getTime();
+          return (aTime - bTime) * sortOrder;
+        }
+
+        // String fields
+        if (typeof aValue === "string" && typeof bValue === "string") {
+          return aValue.localeCompare(bValue) * sortOrder;
+        }
+
+        // Numeric/other comparable fields
+        if (aValue > bValue) return 1 * sortOrder;
+        if (aValue < bValue) return -1 * sortOrder;
+        return 0;
+      });
+
       const total = boards.length;
       const page = paginationOptions.page || 1;
       const limit = paginationOptions.limit || 10;

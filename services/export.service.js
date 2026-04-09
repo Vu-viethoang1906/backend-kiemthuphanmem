@@ -155,6 +155,7 @@ class ExportService {
   _createSummarySheet(reportData) {
     const { reportType } = reportData;
     const rows = [];
+    const insights = this._buildReportInsights(reportData);
 
     // Header
     rows.push(['BÁO CÁO TỔNG QUAN']);
@@ -193,6 +194,13 @@ class ExportService {
       rows.push(['Trung tâm cần cải thiện:', reportData.rankings?.worstCenter?.name || 'N/A']);
     }
 
+    rows.push([]);
+    rows.push(['ĐIỂM NHẤN BÁO CÁO']);
+    if (insights.length === 0) {
+      rows.push(['- Không có dữ liệu nổi bật']);
+    } else {
+      insights.forEach((item, index) => rows.push([`${index + 1}. ${item}`]));
+    }
     rows.push([]);
     rows.push(['Ngày xuất báo cáo:', new Date().toLocaleString('vi-VN')]);
 
@@ -399,6 +407,7 @@ class ExportService {
 
   _addPDFContent(doc, reportData) {
     const { reportType } = reportData;
+    const insights = this._buildReportInsights(reportData);
 
     if (reportType === 'dashboard') {
       doc.fontSize(14).text('Thông tin bảng:', { underline: true });
@@ -478,6 +487,73 @@ class ExportService {
         });
       }
     }
+
+    doc.moveDown();
+    doc.fontSize(14).text('Điểm nhấn báo cáo:', { underline: true });
+    doc.fontSize(11);
+    if (insights.length === 0) {
+      doc.text('- Không có dữ liệu nổi bật');
+    } else {
+      insights.forEach((item, idx) => {
+        doc.text(`${idx + 1}. ${item}`);
+      });
+    }
+  }
+
+  _buildReportInsights(reportData) {
+    const { reportType } = reportData;
+    const insights = [];
+
+    if (reportType === 'dashboard') {
+      const stats = reportData.stats || {};
+      const completionRate = Number(stats.completionRate || 0);
+      insights.push(`Tổng ${stats.totalTasks || 0} task, trong đó ${stats.completedTasks || 0} task đã hoàn thành.`);
+      insights.push(`Tỷ lệ hoàn thành hiện tại là ${completionRate.toFixed(1)}%.`);
+      if ((stats.overdueTasks || 0) > 0) {
+        insights.push(`Có ${stats.overdueTasks} task đang quá hạn, cần ưu tiên xử lý.`);
+      } else {
+        insights.push('Không có task quá hạn trong kỳ báo cáo.');
+      }
+      return insights;
+    }
+
+    if (reportType === 'velocity') {
+      const throughput = reportData.throughput || {};
+      const columns = Object.keys(throughput);
+      const totalEntered = columns.reduce((sum, key) => sum + Number(throughput[key]?.entered || 0), 0);
+      const totalExited = columns.reduce((sum, key) => sum + Number(throughput[key]?.exited || 0), 0);
+      insights.push(`Có ${columns.length} cột được theo dõi với tổng ${totalEntered} task đi vào.`);
+      insights.push(`Tổng số task hoàn tất luồng là ${totalExited}.`);
+      if (totalEntered > 0) {
+        insights.push(`Hiệu suất thoát luồng đạt ${((totalExited / totalEntered) * 100).toFixed(1)}%.`);
+      }
+      return insights;
+    }
+
+    if (reportType === 'leaderboard') {
+      const summary = reportData.summary || {};
+      const top1 = reportData.leaderboard?.[0];
+      insights.push(`Có ${summary.totalUsers || 0} người dùng trong bảng xếp hạng kỳ này.`);
+      insights.push(`Điểm trung bình là ${(summary.averagePoints || 0).toFixed(1)} điểm.`);
+      if (top1) {
+        insights.push(
+          `Top 1 hiện tại là ${top1.fullName || top1.username || 'N/A'} với ${top1.points || 0} điểm.`
+        );
+      }
+      return insights;
+    }
+
+    if (reportType === 'center_comparison') {
+      const summary = reportData.summary || {};
+      const best = reportData.rankings?.bestCenter?.name;
+      const worst = reportData.rankings?.worstCenter?.name;
+      insights.push(`Đang theo dõi ${summary.totalCenters || 0} trung tâm.`);
+      if (best) insights.push(`Trung tâm nổi bật nhất: ${best}.`);
+      if (worst) insights.push(`Trung tâm cần cải thiện: ${worst}.`);
+      return insights;
+    }
+
+    return insights;
   }
 
   generateFilename(reportType, format, userId) {

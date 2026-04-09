@@ -44,7 +44,7 @@ async function getTransporter() {
   return transporterPromise;
 }
 
-async function sendMail(to, subject, html, attachments = []) {
+async function sendMail(to, subject, html, attachments = [], options = {}) {
   try {
     const transporter = await getTransporter();
     const fromEmail = (process.env.EMAIL_USER || '').toString();
@@ -55,6 +55,13 @@ async function sendMail(to, subject, html, attachments = []) {
       subject,
       html,
     };
+
+    if (options.cc) {
+      mailOptions.cc = Array.isArray(options.cc) ? options.cc.join(', ') : options.cc;
+    }
+    if (options.bcc) {
+      mailOptions.bcc = Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc;
+    }
 
     if (attachments && attachments.length > 0) {
       // Support either { filename, path } or { filename, content }

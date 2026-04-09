@@ -1,4 +1,7 @@
 const exportService = require('../services/export.service');
+const { sendMail } = require('../config/mailer');
+const fs = require('fs');
+const path = require('path');
 
 class ExportController {
   async exportReport(req, res) {
@@ -154,8 +157,6 @@ class ExportController {
         });
       }
 
-      const path = require('path');
-      const fs = require('fs');
       const exportsDir = path.join(__dirname, '..', 'exports');
       const filePath = path.join(exportsDir, filename);
 
@@ -197,6 +198,124 @@ class ExportController {
       res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi tải file',
+      });
+    }
+  }
+
+  async sendReportByEmail(req, res) {
+    try {
+      const {
+        report_type,
+        format = 'pdf',
+        board_id,
+        center_id,
+        start_date,
+        end_date,
+        granularity,
+        wipLimit,
+        limit,
+        to,
+        cc,
+        bcc,
+        subject,
+        message,
+      } = req.body || {};
+
+      if (!report_type || !to) {
+        return res.status(400).json({
+          success: false,
+          message: 'report_type và to là bắt buộc',
+        });
+      }
+
+      exportService.validateExportParams(report_type, format);
+
+      if (['dashboard', 'velocity', 'center_comparison'].includes(report_type) && !board_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'board_id là bắt buộc cho loại báo cáo này',
+        });
+      }
+
+      const parseEmails = (value) => {
+        if (!value) return [];
+        if (Array.isArray(value)) return value.filter(Boolean);
+        return String(value)
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean);
+      };
+
+      const toList = parseEmails(to);
+      const ccList = parseEmails(cc);
+      const bccList = parseEmails(bcc);
+      if (toList.length === 0) {
+        return res.status(400).json({ success: false, message: 'Danh sách người nhận trống' });
+      }
+
+      const params = {
+        board_id,
+        center_id,
+        start_date,
+        end_date,
+        granularity,
+        wipLimit: wipLimit ? parseInt(wipLimit) : undefined,
+        limit: limit ? parseInt(limit) : undefined,
+      };
+
+      const reportData = await exportService.generateReportData(report_type, params);
+      const userId = req.user?.id || null;
+      const filename = exportService.generateFilename(report_type, format, userId);
+
+      const filePath =
+        format === 'excel'
+          ? await exportService.exportToExcel(reportData, filename)
+          : await exportService.exportToPDF(reportData, filename);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(500).json({ success: false, message: 'Không tạo được file báo cáo' });
+      }
+
+      const reportBuffer = fs.readFileSync(filePath);
+      const emailSubject =
+        subject ||
+        `[Report] ${report_type} ${new Date().toLocaleDateString('vi-VN')}`;
+      const emailBody =
+        message ||
+        `<p>Xin chào,</p><p>Đính kèm là báo cáo ${report_type} (${format.toUpperCase()}).</p>`;
+
+      await sendMail(
+        toList,
+        emailSubject,
+        emailBody,
+        [
+          {
+            filename: path.basename(filePath),
+            content: reportBuffer,
+          },
+        ],
+        {
+          cc: ccList,
+          bcc: bccList,
+        },
+      );
+
+      res.json({
+        success: true,
+        message: 'Đã gửi email kèm báo cáo thành công',
+        data: {
+          filename,
+          reportType: report_type,
+          format,
+          recipients: { to: toList, cc: ccList, bcc: bccList },
+          sentAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error('❌ Send report email error:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Không thể gửi email báo cáo',
       });
     }
   }

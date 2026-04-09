@@ -137,25 +137,50 @@ class BacklogItemService {
     return created;
   }
 
-  async createWeeklyBoardForUser(userId, { baseTitle, startDate }) {
+  async createWeeklyBoardForUser(userId, { baseTitle, startDate, title, description }) {
     const start = startOfISOWeek(startDate || new Date());
     const end = endOfISOWeek(start);
 
     const titlePrefix = baseTitle && String(baseTitle).trim() ? String(baseTitle).trim() : 'Sprint';
-    const title = `${titlePrefix} ${formatDateYYYYMMDD(start)} → ${formatDateYYYYMMDD(end)}`;
+    const generatedTitle = `${titlePrefix} ${formatDateYYYYMMDD(start)} → ${formatDateYYYYMMDD(end)}`;
+    const requestedTitle = String(title || '').trim();
+    const finalTitle = requestedTitle || generatedTitle;
+    const finalDescription =
+      String(description || '').trim() ||
+      `Weekly board (${formatDateYYYYMMDD(start)} to ${formatDateYYYYMMDD(end)})`;
 
-    const board = await boardService.createBoard({
-      title,
-      description: `Weekly board (${formatDateYYYYMMDD(start)} to ${formatDateYYYYMMDD(end)})`,
-      userId,
-      is_template: false,
-    });
+    let board = null;
+    let lastError = null;
+    const maxRetries = 8;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const candidateTitle =
+        attempt === 0 ? finalTitle : `${finalTitle} (${attempt + 1})`;
+      try {
+        board = await boardService.createBoard({
+          title: candidateTitle,
+          description: finalDescription,
+          userId,
+          is_template: false,
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        const isDuplicateName = String(error?.message || '').includes('board với tên này');
+        if (!isDuplicateName) {
+          throw error;
+        }
+      }
+    }
+
+    if (!board) {
+      throw lastError || new Error('Không thể tạo board mới');
+    }
 
     const columns = await this.ensureBoardHasDefaultColumns(board._id);
 
     const sprint = await Sprint.create({
       board_id: board._id,
-      name: title,
+      name: board.title,
       start_date: start,
       end_date: end,
       sprint_duration_days: 7,
@@ -180,6 +205,8 @@ class BacklogItemService {
       const created = await this.createWeeklyBoardForUser(userId, {
         baseTitle: weekly?.baseTitle,
         startDate: weekly?.startDate,
+        title: weekly?.title,
+        description: weekly?.description,
       });
       createdBoard = created.board;
       createdColumns = created.columns;
